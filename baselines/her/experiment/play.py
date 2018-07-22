@@ -14,7 +14,8 @@ from baselines.her.rollout import RolloutWorker
 @click.option('--n_test_rollouts', type=int, default=10)
 @click.option('--render', type=int, default=1)
 @click.option('--with_forces', type=bool, default=False)
-def main(policy_file, seed, n_test_rollouts, render, with_forces):
+@click.option('--plot_forces', type=bool, default=False)
+def main(policy_file, seed, n_test_rollouts, render, with_forces, plot_forces):
     set_global_seeds(seed)
 
     # Load policy.
@@ -25,6 +26,7 @@ def main(policy_file, seed, n_test_rollouts, render, with_forces):
     # Prepare params.
     params = config.DEFAULT_PARAMS
     params['with_forces'] = with_forces
+    params['plot_forces'] = plot_forces
     if env_name in config.DEFAULT_ENV_PARAMS:
         params.update(config.DEFAULT_ENV_PARAMS[env_name])  # merge env-specific parameters in
     params['env_name'] = env_name
@@ -39,6 +41,7 @@ def main(policy_file, seed, n_test_rollouts, render, with_forces):
         'compute_Q': True,
         'rollout_batch_size': 1,
         'with_forces': with_forces,
+        'plot_forces': plot_forces,
         'render': bool(render),
     }
 
