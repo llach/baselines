@@ -84,12 +84,12 @@ def train(policy, rollout_worker, evaluator,
 
 def launch(
     env, logdir, n_epochs, num_cpu, seed, replay_strategy, policy_save_interval, clip_return, with_forces, plot_forces,
-    override_params={}, save_policies=True
+        overload, override_params={}, save_policies=True
 ):
     # Fork for multi-CPU MPI implementation.
     if num_cpu > 1:
         try:
-            whoami = mpi_fork(num_cpu, ['--bind-to', 'core'])
+            whoami = mpi_fork(num_cpu, ['--bind-to', ('core:overload-allowed' if overload else 'core')])
         except CalledProcessError:
             # fancy version of mpi call failed, try simple version
             whoami = mpi_fork(num_cpu)
@@ -191,6 +191,7 @@ def launch(
 @click.option('--clip_return', type=int, default=1, help='whether or not returns should be clipped')
 @click.option('--with_forces', default=None)
 @click.option('--plot_forces', type=bool, default=False)
+@click.option('--overload', type=bool, default=False)
 def main(**kwargs):
     launch(**kwargs)
 
