@@ -42,6 +42,10 @@ class RolloutWorker:
             for e in self.envs:
                 e.env.set_force_mode(self.wf)
 
+        if kwargs['object_multiplier'] is not None:
+            for e in self.envs:
+                e.env.set_object_factor(kwargs['object_multiplier'])
+
         self.plot_forces = kwargs['plot_forces']
 
         self.info_keys = [key.replace('info_', '') for key in dims.keys() if key.startswith('info_')]

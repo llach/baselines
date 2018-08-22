@@ -26,7 +26,6 @@ def main(policy_file, seed, n_test_rollouts, render, with_forces, plot_forces):
     # Prepare params.
     params = config.DEFAULT_PARAMS
     params['with_forces'] = with_forces
-    params['plot_forces'] = plot_forces
     if env_name in config.DEFAULT_ENV_PARAMS:
         params.update(config.DEFAULT_ENV_PARAMS[env_name])  # merge env-specific parameters in
     params['env_name'] = env_name
@@ -34,6 +33,7 @@ def main(policy_file, seed, n_test_rollouts, render, with_forces, plot_forces):
     config.log_params(params, logger=logger)
 
     dims = config.configure_dims(params)
+    object_multiplier = 1.0
 
     eval_params = {
         'exploit': True,
@@ -42,6 +42,7 @@ def main(policy_file, seed, n_test_rollouts, render, with_forces, plot_forces):
         'rollout_batch_size': 1,
         'with_forces': with_forces,
         'plot_forces': plot_forces,
+        'object_multiplier': object_multiplier,
         'render': bool(render),
     }
 

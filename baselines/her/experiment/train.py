@@ -99,6 +99,31 @@ def launch(
         import baselines.common.tf_util as U
         U.single_threaded_session().__enter__()
     rank = MPI.COMM_WORLD.Get_rank()
+    comm = MPI.COMM_WORLD
+
+    object_multiplier = 1.0
+
+    # check for multiple envs
+    if ':' in env:
+        if rank == 0:
+            envs = env.split(':')
+            sizes = [.8, .85, .9, .95, 1., 1.05, 1.1, 1.15, 1.2]
+            assert len(sizes) * len(envs) == num_cpu
+
+            env_config = []
+
+            for e in envs:
+                for s in sizes:
+                    env_config += [(e, s)]
+        else:
+            env_config = None
+
+        # broadcast new environment config for all threads
+        env_config = comm.scatter(env_config, root=0)
+
+        env = env_config[0]
+        object_multiplier = env_config[1]
+
 
     # Configure logging
     if rank == 0:
@@ -117,7 +142,6 @@ def launch(
     # Prepare params.
     params = config.DEFAULT_PARAMS
     params['with_forces'] = with_forces
-    params['plot_forces'] = plot_forces
     params['env_name'] = env
     params['replay_strategy'] = replay_strategy
     if env in config.DEFAULT_ENV_PARAMS:
@@ -150,6 +174,7 @@ def launch(
         'compute_Q': False,
         'with_forces': with_forces,
         'plot_forces': plot_forces,
+        'object_multiplier': object_multiplier,
         'T': params['T'],
     }
 
@@ -160,6 +185,7 @@ def launch(
         'compute_Q': True,
         'with_forces': with_forces,
         'plot_forces': plot_forces,
+        'object_multiplier': object_multiplier,
         'T': params['T'],
     }
 
