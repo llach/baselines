@@ -111,8 +111,13 @@ for env_id in sorted(data.keys()):
 
         plt.plot(xs[0], np.nanmedian(ys, axis=0), label=config)
         plt.fill_between(xs[0], np.nanpercentile(ys, 25, axis=0), np.nanpercentile(ys, 75, axis=0), alpha=0.25)
+        axes = plt.gca()
+        axes.set_ylim([0, 0.25])
+
     plt.title(env_id)
     plt.xlabel('Epoch')
     plt.ylabel('Median Success Rate')
     plt.legend()
     plt.savefig(os.path.join(args.dir, 'fig_{}.png'.format(env_id)))
+
+    plt.show()
