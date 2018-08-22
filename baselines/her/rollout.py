@@ -37,10 +37,10 @@ class RolloutWorker:
 
         self.wf = kwargs['with_forces']
 
-        if self.wf:
+        if self.wf is not None:
             self.dims['o'] = 77
             for e in self.envs:
-                e.env.use_forces()
+                e.env.set_force_mode(self.wf)
 
         self.plot_forces = kwargs['plot_forces']
 

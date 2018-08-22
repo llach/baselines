@@ -13,7 +13,7 @@ from baselines.her.rollout import RolloutWorker
 @click.option('--seed', type=int, default=0)
 @click.option('--n_test_rollouts', type=int, default=10)
 @click.option('--render', type=int, default=1)
-@click.option('--with_forces', type=bool, default=False)
+@click.option('--with_forces', default=None)
 @click.option('--plot_forces', type=bool, default=False)
 def main(policy_file, seed, n_test_rollouts, render, with_forces, plot_forces):
     set_global_seeds(seed)

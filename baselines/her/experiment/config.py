@@ -157,8 +157,8 @@ def configure_dims(params):
     env = cached_make_env(params['make_env'])
     env.reset()
 
-    if params['with_forces']:
-        env.env.use_forces()
+    if params['with_forces'] is not None:
+        env.env.set_force_mode(params['with_forces'])
 
     obs, _, _, info = env.step(env.action_space.sample())
 
