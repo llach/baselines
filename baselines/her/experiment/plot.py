@@ -54,7 +54,10 @@ def pad(xs, value=np.nan):
 parser = argparse.ArgumentParser()
 parser.add_argument('dir', type=str)
 parser.add_argument('--smooth', type=int, default=1)
+parser.add_argument('--suffix', action='store_true')
 args = parser.parse_args()
+
+suffix = ''
 
 # Load all data.
 data = {}
@@ -62,6 +65,10 @@ paths = [os.path.abspath(os.path.join(path, '..')) for path in glob2.glob(os.pat
 for curr_path in paths:
     if not os.path.isdir(curr_path):
         continue
+
+    if args.suffix:
+        suffix = '\n' + curr_path.split('/')[-1]
+
     results = load_results(os.path.join(curr_path, 'progress.csv'))
     if not results:
         print('skipping {}'.format(curr_path))
@@ -114,7 +121,7 @@ for env_id in sorted(data.keys()):
         axes = plt.gca()
         axes.set_ylim([0, 0.25])
 
-    plt.title(env_id)
+    plt.title(env_id + suffix)
     plt.xlabel('Epoch')
     plt.ylabel('Median Success Rate')
     plt.legend()
