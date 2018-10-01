@@ -1,8 +1,11 @@
 import os
+import sys
 import matplotlib.pyplot as plt
 import numpy as np
 import json
-import seaborn as sns; sns.set()
+import seaborn as sns;
+
+sns.set()
 import glob2
 import argparse
 
@@ -12,7 +15,7 @@ def smooth_reward_curve(x, y):
     k = halfwidth
     xsmoo = x
     ysmoo = np.convolve(y, np.ones(2 * k + 1), mode='same') / np.convolve(np.ones_like(y), np.ones(2 * k + 1),
-        mode='same')
+                                                                          mode='same')
     return xsmoo, ysmoo
 
 
@@ -37,12 +40,12 @@ def load_results(file):
 
 def pad(xs, value=np.nan):
     maxlen = np.max([len(x) for x in xs])
-    
+
     padded_xs = []
     for x in xs:
         if x.shape[0] >= maxlen:
             padded_xs.append(x)
-    
+
         padding = np.ones((maxlen - x.shape[0],) + x.shape[1:]) * value
         x_padded = np.concatenate([x, padding], axis=0)
         assert x_padded.shape[1:] == x.shape[1:]
@@ -51,23 +54,15 @@ def pad(xs, value=np.nan):
     return np.array(padded_xs)
 
 
-parser = argparse.ArgumentParser()
-parser.add_argument('dir', type=str)
-parser.add_argument('--smooth', type=int, default=1)
-parser.add_argument('--suffix', action='store_true')
-args = parser.parse_args()
-
-suffix = ''
-
+wd = os.getcwd()
+policy_dirs = sys.argv[1:]
 # Load all data.
 data = {}
-paths = [os.path.abspath(os.path.join(path, '..')) for path in glob2.glob(os.path.join(args.dir, '**', 'progress.csv'))]
+
+paths = [wd + '/' + p for p in policy_dirs]
 for curr_path in paths:
     if not os.path.isdir(curr_path):
         continue
-
-    if args.suffix:
-        suffix = '\n' + curr_path.split('/')[-1]
 
     results = load_results(os.path.join(curr_path, 'progress.csv'))
     if not results:
@@ -96,8 +91,6 @@ for curr_path in paths:
     assert success_rate.shape == epoch.shape
     x = epoch
     y = success_rate
-    if args.smooth:
-        x, y = smooth_reward_curve(epoch, success_rate)
     assert x.shape == y.shape
 
     if env_id not in data:
@@ -106,26 +99,44 @@ for curr_path in paths:
         data[env_id][config] = []
     data[env_id][config].append((x, y))
 
-# Plot data.
-for env_id in sorted(data.keys()):
-    print('exporting {}'.format(env_id))
-    plt.clf()
+# This plot is for comparison in the same env only. check if we have different envs
+if len(data.keys()) > 1:
+    print('only one env is supported for comparison')
+    sys.exit(1)
 
-    for config in sorted(data[env_id].keys()):
-        xs, ys = zip(*data[env_id][config])
-        xs, ys = pad(xs), pad(ys)
-        assert xs.shape == ys.shape
+env = list(data.keys())[0]
 
-        plt.plot(xs[0], np.nanmedian(ys, axis=0), label=config)
-        plt.fill_between(xs[0], np.nanpercentile(ys, 25, axis=0), np.nanpercentile(ys, 75, axis=0), alpha=0.25)
+print('exporting {}'.format(env))
+plt.clf()
+fig = plt.gcf()
+fig.set_size_inches(18.5, 10.5)
 
-    axes = plt.gca()
-    axes.set_ylim([0, 0.25])
+for config in sorted(data[env].keys()):
+    xs, ys = zip(*data[env][config])
 
-    plt.title(env_id + suffix)
-    plt.xlabel('Epoch')
-    plt.ylabel('Median Success Rate')
-    plt.legend()
-    plt.savefig(os.path.join(args.dir, 'fig_{}.png'.format(env_id)))
 
-    plt.show()
+    for i in range(len(xs)):
+        x, y = [], []
+        x = [np.array(xs[i].copy())]
+        y = [np.array(ys[i].copy())]
+
+        xt = tuple(x)
+        yt = tuple(y)
+        xt, yt = pad(xt), pad(yt)
+        assert xt.shape == yt.shape
+
+        plt.plot(xt[0], np.nanmedian(yt, axis=0), label=config)
+        # plt.fill_between(x[i], np.nanpercentile(y, 25, axis=0), np.nanpercentile(y, 75, axis=0), alpha=0.25)
+
+        # plt.plot(xs[i], ys[i], label=policy_dirs[i])
+
+axes = plt.gca()
+axes.set_ylim([0, 0.25])
+
+plt.title(env)
+plt.xlabel('Epoch')
+plt.ylabel('Median Success Rate')
+plt.legend()
+plt.savefig(os.path.join(wd, 'fig_{}.png'.format(env_id)))
+
+plt.show()
