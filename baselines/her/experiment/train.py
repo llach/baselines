@@ -101,7 +101,7 @@ def launch(
     rank = MPI.COMM_WORLD.Get_rank()
     comm = MPI.COMM_WORLD
 
-    object_multiplier = 1.0
+    object_multiplier = None
 
     # check for multiple envs
     if ':' in env:
