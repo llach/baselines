@@ -107,7 +107,8 @@ def launch(
     if ':' in env:
         if rank == 0:
             envs = env.split(':')
-            sizes = [.8, .85, .9, .95, 1., 1.05, 1.1, 1.15, 1.2]
+            # sizes = [.8, .85, .9, .95, 1., 1.05, 1.1, 1.15, 1.2]
+            sizes = [.95, 1.05]
             assert len(sizes) * len(envs) == num_cpu
 
             env_config = []
@@ -172,8 +173,6 @@ def launch(
         'use_target_net': False,
         'use_demo_states': True,
         'compute_Q': False,
-        'with_forces': with_forces,
-        'plot_forces': plot_forces,
         'object_multiplier': object_multiplier,
         'T': params['T'],
     }
@@ -183,8 +182,6 @@ def launch(
         'use_target_net': params['test_with_polyak'],
         'use_demo_states': False,
         'compute_Q': True,
-        'with_forces': with_forces,
-        'plot_forces': plot_forces,
         'object_multiplier': object_multiplier,
         'T': params['T'],
     }

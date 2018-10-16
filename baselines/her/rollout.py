@@ -35,18 +35,9 @@ class RolloutWorker:
         self.envs = [make_env() for _ in range(rollout_batch_size)]
         assert self.T > 0
 
-        self.wf = kwargs['with_forces']
-
-        if self.wf is not None:
-            self.dims['o'] = 77
-            for e in self.envs:
-                e.env.set_force_mode(self.wf)
-
         if kwargs['object_multiplier'] is not None:
             for e in self.envs:
                 e.env.set_object_factor(kwargs['object_multiplier'])
-
-        self.plot_forces = kwargs['plot_forces']
 
         self.info_keys = [key.replace('info_', '') for key in dims.keys() if key.startswith('info_')]
 
@@ -61,37 +52,12 @@ class RolloutWorker:
         self.reset_all_rollouts()
         self.clear_history()
 
-        if self.plot_forces:
-            self.NUM_SENSORS = 16
-            self.NUM_PLOT_LOOKBACK = 101
-
-            self.xdata = [i for i in range(self.NUM_PLOT_LOOKBACK)]
-            self.forcedata = [[0.0 for _ in range(self.NUM_PLOT_LOOKBACK)] for _ in range(self.NUM_SENSORS)]
-
-            self.fig, self.ax = plt.subplots(1, 1)
-
-            plt.show(False)
-            plt.draw()
-
-            axes = plt.gca()
-            axes.set_xlim([0, 100])
-            axes.set_ylim([-0.1, 15])
-
-            # cache the background
-            self.background = self.fig.canvas.copy_from_bbox(self.ax.bbox)
-
-            self.lines = [self.ax.plot(self.xdata, self.forcedata[i])[0] for i in range(self.NUM_SENSORS)]
-
     def reset_rollout(self, i):
         """Resets the `i`-th rollout environment, re-samples a new goal, and updates the `initial_o`
         and `g` arrays accordingly.
         """
         obs = self.envs[i].reset()
-
-        if self.wf:
-            self.initial_o[i] = np.append(obs['observation'], np.ndarray([0 for _ in range(16)]))
-        else:
-            self.initial_o[i] = obs['observation']
+        self.initial_o[i] = obs['observation']
 
         self.initial_ag[i] = obs['achieved_goal']
         self.g[i] = obs['desired_goal']
@@ -145,19 +111,6 @@ class RolloutWorker:
                     # We fully ignore the reward here because it will have to be re-computed
                     # for HER.
                     curr_o_new, _, _, info = self.envs[i].step(u[i])
-
-                    if self.plot_forces:
-                        for j in range(self.NUM_SENSORS):
-                            l = self.forcedata[j][1:].copy()
-                            l.append(self.envs[i].env.sim.data.sensordata[-(j+1)])
-                            self.forcedata[j] = l
-
-                            self.lines[j].set_data(self.xdata, self.forcedata[j])
-
-                        self.fig.canvas.draw()
-                        self.fig.canvas.flush_events()
-
-                        plt.pause(0.000000000001)
 
                     if 'is_success' in info:
                         success[i] = info['is_success']
