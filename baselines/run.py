@@ -195,6 +195,9 @@ def main():
     model, env = train(args, extra_args)
     env.close()
 
+    if args.store_frames:
+        from PIL import Image
+
     if args.save_path is not None and rank == 0:
         save_path = osp.expanduser(args.save_path)
         model.save(save_path)
@@ -206,9 +209,14 @@ def main():
         def initialize_placeholders(nlstm=128,**kwargs):
             return np.zeros((args.num_env or 1, 2*nlstm)), np.zeros((1))
         state, dones = initialize_placeholders(**extra_args)
+
+        ae = env.env.env.env.env.env.env.env.env.env
+        ae._set_store_frames()
+
         while True:
-            actions, _, state, _ = model.step(obs,S=state, M=dones)
+            actions, _, state, _ = model.step(obs, S=state, M=dones)
             obs, _, done, _ = env.step(actions)
+
             env.render()
             done = done.any() if isinstance(done, np.ndarray) else done
 
