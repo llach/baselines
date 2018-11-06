@@ -109,10 +109,21 @@ for env_id in sorted(data.keys()):
         xs, ys = pad(xs), pad(ys)
         assert xs.shape == ys.shape
 
-        plt.plot(xs[0], np.nanmedian(ys, axis=0), label=config)
-        plt.fill_between(xs[0], np.nanpercentile(ys, 25, axis=0), np.nanpercentile(ys, 75, axis=0), alpha=0.25)
+        x = xs[0]
+        y = np.nanmedian(ys, axis=0)
+        plt.plot(x, y, label=config)
+        # plt.fill_between(xs[0], np.nanpercentile(ys, 25, axis=0), np.nanpercentile(ys, 75, axis=0), alpha=0.25)
     plt.title(env_id)
     plt.xlabel('Epoch')
     plt.ylabel('Median Success Rate')
     plt.legend()
     plt.savefig(os.path.join(args.dir, 'fig_{}.png'.format(env_id)))
+
+    name = curr_path.split('/')[-1]
+
+    # save dataset
+    with open('{}/{}.npz'.format(os.environ['HOME'], name), 'wb') as file:
+        np.savez_compressed(file, x=x, y=y)
+
+    plt.show()
+
