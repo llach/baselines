@@ -107,8 +107,7 @@ def launch(
     if ':' in env:
         if rank == 0:
             envs = env.split(':')
-            # sizes = [.8, .85, .9, .95, 1., 1.05, 1.1, 1.15, 1.2]
-            sizes = [.95, 1.05]
+            sizes = [.8, .85, .9, .95, 1., 1.05, 1.1, 1.15, 1.2]
             assert len(sizes) * len(envs) == num_cpu
 
             env_config = []
