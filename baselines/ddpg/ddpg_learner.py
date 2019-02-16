@@ -67,7 +67,6 @@ class DDPG(object):
     def __init__(self, actor, critic, memory, observation_shape, action_shape, param_noise=None, action_noise=None,
         gamma=0.99, tau=0.001, normalize_returns=False, enable_popart=False, normalize_observations=True,
         batch_size=128, observation_range=(-5., 5.), action_range=(-1., 1.), return_range=(-np.inf, np.inf),
-        adaptive_param_noise=True, adaptive_param_noise_policy_threshold=.1,
         critic_l2_reg=0., actor_lr=1e-4, critic_lr=1e-3, clip_norm=None, reward_scale=1.):
         # Inputs.
         self.obs0 = tf.placeholder(tf.float32, shape=(None,) + observation_shape, name='obs0')
@@ -186,7 +185,7 @@ class DDPG(object):
         normalized_critic_target_tf = tf.clip_by_value(normalize(self.critic_target, self.ret_rms), self.return_range[0], self.return_range[1])
         self.critic_loss = tf.reduce_mean(tf.square(self.normalized_critic_tf - normalized_critic_target_tf))
         if self.critic_l2_reg > 0.:
-            critic_reg_vars = [var for var in self.critic.trainable_vars if 'kernel' in var.name and 'output' not in var.name]
+            critic_reg_vars = [var for var in self.critic.trainable_vars if var.name.endswith('/w:0') and 'output' not in var.name]
             for var in critic_reg_vars:
                 logger.info('  regularizing: {}'.format(var.name))
             logger.info('  applying l2 regularization with {}'.format(self.critic_l2_reg))
