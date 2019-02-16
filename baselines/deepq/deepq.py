@@ -286,6 +286,9 @@ def learn(env,
             replay_buffer.add(obs, action, rew, new_obs, float(done))
             obs = new_obs
 
+            if t == learning_starts:
+                print('Learning starts now!')
+
             episode_rewards[-1] += rew
             if done:
                 obs = env.reset()

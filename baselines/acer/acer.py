@@ -17,6 +17,8 @@ from baselines.a2c.utils import get_by_index, check_shape, avg_norm, gradient_ad
 from baselines.acer.buffer import Buffer
 from baselines.acer.runner import Runner
 
+from tqdm import tqdm
+
 # remove last step
 def strip(var, nenvs, nsteps, flat = False):
     vars = batch_to_seq(var, nenvs, nsteps + 1, flat)
@@ -350,7 +352,7 @@ def learn(network, env, seed=None, nsteps=20, total_timesteps=int(80e6), q_coef=
     nenvs = env.num_envs
     ob_space = env.observation_space
     ac_space = env.action_space
-
+    total_timesteps = int(80e6)
     nstack = env.nstack
     model = Model(policy=policy, ob_space=ob_space, ac_space=ac_space, nenvs=nenvs, nsteps=nsteps,
                   ent_coef=ent_coef, q_coef=q_coef, gamma=gamma,
@@ -367,7 +369,7 @@ def learn(network, env, seed=None, nsteps=20, total_timesteps=int(80e6), q_coef=
     acer = Acer(runner, model, buffer, log_interval)
     acer.tstart = time.time()
 
-    for acer.steps in range(0, total_timesteps, nbatch): #nbatch samples, 1 on_policy call and multiple off-policy calls
+    for acer.steps in tqdm(range(0, total_timesteps, nbatch)): #nbatch samples, 1 on_policy call and multiple off-policy calls
         acer.call(on_policy=True)
         if replay_ratio > 0 and buffer.has_atleast(replay_start):
             n = np.random.poisson(replay_ratio)
