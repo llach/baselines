@@ -14,6 +14,9 @@ from baselines.a2c.runner import Runner
 
 from tensorflow import losses
 
+from tqdm import tqdm
+
+
 class Model(object):
 
     """
@@ -119,7 +122,7 @@ def learn(
     env,
     seed=None,
     nsteps=5,
-    total_timesteps=int(80e6),
+    total_timesteps=int(80e7),
     vf_coef=0.5,
     ent_coef=0.01,
     max_grad_norm=0.5,
@@ -202,7 +205,7 @@ def learn(
     # Start total timer
     tstart = time.time()
 
-    for update in range(1, total_timesteps//nbatch+1):
+    for update in tqdm(range(1, total_timesteps//nbatch+1)):
         # Get mini batch of experiences
         obs, states, rewards, masks, actions, values = runner.run()
 
@@ -221,6 +224,7 @@ def learn(
             logger.record_tabular("policy_entropy", float(policy_entropy))
             logger.record_tabular("value_loss", float(value_loss))
             logger.record_tabular("explained_variance", float(ev))
+            logger.record_tabular("reward", np.mean(rewards))
             logger.dump_tabular()
     return model
 

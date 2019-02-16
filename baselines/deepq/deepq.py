@@ -19,6 +19,8 @@ from baselines.deepq.utils import ObservationInput
 from baselines.common.tf_util import get_session
 from baselines.deepq.models import build_q_func
 
+from tqdm import tqdm
+
 
 class ActWrapper(object):
     def __init__(self, act, act_params):
@@ -96,13 +98,13 @@ def learn(env,
           network,
           seed=None,
           lr=5e-4,
-          total_timesteps=100000,
+          total_timesteps=1000000,
           buffer_size=50000,
           exploration_fraction=0.1,
           exploration_final_eps=0.02,
           train_freq=1,
           batch_size=32,
-          print_freq=100,
+          print_freq=5,
           checkpoint_freq=10000,
           checkpoint_path=None,
           learning_starts=1000,
@@ -257,7 +259,7 @@ def learn(env,
             logger.log('Loaded model from {}'.format(load_path))
 
 
-        for t in range(total_timesteps):
+        for t in tqdm(range(total_timesteps)):
             if callback is not None:
                 if callback(locals(), globals()):
                     break
