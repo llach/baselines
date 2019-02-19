@@ -1,7 +1,9 @@
 import os.path as osp
 import time
 import functools
+import numpy as np
 import tensorflow as tf
+
 from baselines import logger
 
 from baselines.common import set_global_seeds, explained_variance
@@ -11,6 +13,8 @@ from baselines.common.tf_util import get_session, save_variables, load_variables
 from baselines.a2c.runner import Runner
 from baselines.a2c.utils import Scheduler, find_trainable_variables
 from baselines.acktr import kfac
+
+from tqdm import tqdm
 
 
 class Model(object):
@@ -126,9 +130,10 @@ def learn(network, env, seed, total_timesteps=int(40e6), gamma=0.99, log_interva
     else:
         enqueue_threads = []
 
-    for update in range(1, total_timesteps//nbatch+1):
+    for update in tqdm(range(1, total_timesteps//nbatch+1)):
         obs, states, rewards, masks, actions, values = runner.run()
         policy_loss, value_loss, policy_entropy = model.train(obs, states, rewards, masks, actions, values)
+        mrew = np.mean(rewards)
         model.old_obs = obs
         nseconds = time.time()-tstart
         fps = int((update*nbatch)/nseconds)
@@ -141,6 +146,7 @@ def learn(network, env, seed, total_timesteps=int(40e6), gamma=0.99, log_interva
             logger.record_tabular("policy_loss", float(policy_loss))
             logger.record_tabular("value_loss", float(value_loss))
             logger.record_tabular("explained_variance", float(ev))
+            logger.record_tabular("mean_reward", float(mrew))
             logger.dump_tabular()
 
         if save_interval and (update % save_interval == 0 or update == 1) and logger.get_dir():
