@@ -132,6 +132,7 @@ def learn(
     epsilon=1e-5,
     alpha=0.99,
     gamma=0.99,
+    reward_average=2,
     log_interval=100,
     load_path=None,
     **network_kwargs):
@@ -206,12 +207,35 @@ def learn(
     # Start total timer
     tstart = time.time()
 
+    episode_rewards = []
+    current_rewards = [0.0] * nenvs
+    nepisodes = 0
+
     for update in tqdm(range(1, total_timesteps//nbatch+1)):
         # Get mini batch of experiences
-        obs, states, rewards, masks, actions, values = runner.run()
+        obs, states, rewards, masks, actions, values, dones, raw_rewards = runner.run()
 
         policy_loss, value_loss, policy_entropy = model.train(obs, states, rewards, masks, actions, values)
         nseconds = time.time()-tstart
+
+        for n, (rs, ds) in enumerate(zip(raw_rewards, dones)):
+            rs = rs.tolist()
+            ds = ds.tolist()
+
+            for r, d in zip(rs, ds):
+                if d:
+                    episode_rewards.append(current_rewards[n])
+                    current_rewards[n] = 0.0
+                else:
+                    current_rewards[n] += r
+
+        if len(episode_rewards) > reward_average:
+            mrew = np.mean(episode_rewards[-reward_average:])
+        else:
+            mrew = -np.infty
+
+        if np.any(dones):
+            nepisodes += 1
 
         # Calculate the fps (frame per second)
         fps = int((update*nbatch)/nseconds)
@@ -225,7 +249,8 @@ def learn(
             logger.record_tabular("policy_entropy", float(policy_entropy))
             logger.record_tabular("value_loss", float(value_loss))
             logger.record_tabular("explained_variance", float(ev))
-            logger.record_tabular("reward", np.mean(rewards))
+            logger.record_tabular("mean_reward [{}]".format(reward_average), float(mrew))
+            logger.record_tabular("nepisodes", nepisodes)
             logger.dump_tabular()
     return model
 

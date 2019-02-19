@@ -50,6 +50,7 @@ class Runner(AbstractEnvRunner):
         mb_masks = mb_dones[:, :-1]
         mb_dones = mb_dones[:, 1:]
 
+        mb_raw_rewards = mb_rewards.copy()
 
         if self.gamma > 0.0:
             # Discount/bootstrap off value fn
@@ -69,4 +70,4 @@ class Runner(AbstractEnvRunner):
         mb_rewards = mb_rewards.flatten()
         mb_values = mb_values.flatten()
         mb_masks = mb_masks.flatten()
-        return mb_obs, mb_states, mb_rewards, mb_masks, mb_actions, mb_values
+        return mb_obs, mb_states, mb_rewards, mb_masks, mb_actions, mb_values, mb_dones, mb_raw_rewards

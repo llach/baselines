@@ -96,7 +96,8 @@ class Model(object):
 
 def learn(network, env, seed, total_timesteps=int(40e6), gamma=0.99, log_interval=1, nprocs=32, nsteps=20,
                  ent_coef=0.01, vf_coef=0.5, vf_fisher_coef=1.0, lr=0.25, max_grad_norm=0.5,
-                 kfac_clip=0.001, save_interval=None, lrschedule='linear', load_path=None, is_async=True, **network_kwargs):
+                 kfac_clip=0.001, save_interval=None, lrschedule='linear', load_path=None, is_async=True,
+          reward_average=20, **network_kwargs):
     set_global_seeds(seed)
 
 
@@ -130,13 +131,37 @@ def learn(network, env, seed, total_timesteps=int(40e6), gamma=0.99, log_interva
     else:
         enqueue_threads = []
 
+    episode_rewards = []
+    current_rewards = [0.0]*nenvs
+    nepisodes = 0
+
     for update in tqdm(range(1, total_timesteps//nbatch+1)):
-        obs, states, rewards, masks, actions, values = runner.run()
+        obs, states, rewards, masks, actions, values, dones, raw_rewards = runner.run()
+
+        for n, (rs, ds) in enumerate(zip(raw_rewards, dones)):
+            rs = rs.tolist()
+            ds = ds.tolist()
+
+            for r, d in zip(rs, ds):
+                if d:
+                    episode_rewards.append(current_rewards[n])
+                    current_rewards[n] = 0.0
+                else:
+                    current_rewards[n] += r
+
+        if len(episode_rewards) > reward_average:
+            mrew = np.mean(episode_rewards[-reward_average:])
+        else:
+            mrew = -np.infty
+
+        if np.any(dones):
+            nepisodes += 1
+
         policy_loss, value_loss, policy_entropy = model.train(obs, states, rewards, masks, actions, values)
-        mrew = np.mean(rewards)
         model.old_obs = obs
         nseconds = time.time()-tstart
         fps = int((update*nbatch)/nseconds)
+
         if update % log_interval == 0 or update == 1:
             ev = explained_variance(values, rewards)
             logger.record_tabular("nupdates", update)
@@ -146,7 +171,8 @@ def learn(network, env, seed, total_timesteps=int(40e6), gamma=0.99, log_interva
             logger.record_tabular("policy_loss", float(policy_loss))
             logger.record_tabular("value_loss", float(value_loss))
             logger.record_tabular("explained_variance", float(ev))
-            logger.record_tabular("mean_reward", float(mrew))
+            logger.record_tabular("mean_reward [{}]".format(reward_average), float(mrew))
+            logger.record_tabular("nepisodes", nepisodes)
             logger.dump_tabular()
 
         if save_interval and (update % save_interval == 0 or update == 1) and logger.get_dir():
