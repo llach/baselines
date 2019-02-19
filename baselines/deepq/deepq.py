@@ -1,4 +1,5 @@
 import os
+import time
 import tempfile
 
 import tensorflow as tf
@@ -258,6 +259,7 @@ def learn(env,
             load_variables(load_path)
             logger.log('Loaded model from {}'.format(load_path))
 
+        tstart = time.time()
 
         for t in tqdm(range(total_timesteps)):
             if callback is not None:
@@ -315,7 +317,10 @@ def learn(env,
             mean_100ep_reward = round(np.mean(episode_rewards[-101:-1]), 1)
             num_episodes = len(episode_rewards)
             if done and print_freq is not None and len(episode_rewards) % print_freq == 0:
+                nseconds = time.time() - tstart
+                fps = int(t/nseconds)
                 logger.record_tabular("steps", t)
+                logger.record_tabular("fps", fps)
                 logger.record_tabular("episodes", num_episodes)
                 logger.record_tabular("mean 100 episode reward", mean_100ep_reward)
                 logger.record_tabular("% time spent exploring", int(100 * exploration.value(t)))
