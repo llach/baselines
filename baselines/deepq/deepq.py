@@ -193,6 +193,12 @@ def learn(env,
     sess = get_session()
     set_global_seeds(seed)
 
+    print('Using parameters: ')
+    print('{')
+    for k, v in locals().items():
+        print('     ', k, ': ', v)
+    print('}')
+
     q_func = build_q_func(network, **network_kwargs)
 
     # capture the shape outside the closure so that the env object is not serialized
