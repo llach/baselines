@@ -163,7 +163,13 @@ def learn(network, env, seed, total_timesteps=int(40e6), gamma=0.99, log_interva
         fps = int((update*nbatch)/nseconds)
 
         if update % log_interval == 0 or update == 1:
-            ev = explained_variance(values, rewards)
+
+            try:
+                ev = explained_variance(values, rewards)
+            except:
+                print("caught ev calc error")
+                ev = -5
+
             logger.record_tabular("nupdates", update)
             logger.record_tabular("total_timesteps", update*nbatch)
             logger.record_tabular("fps", fps)

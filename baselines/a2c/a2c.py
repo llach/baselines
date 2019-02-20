@@ -132,7 +132,7 @@ def learn(
     epsilon=1e-5,
     alpha=0.99,
     gamma=0.99,
-    reward_average=2,
+    reward_average=20,
     log_interval=100,
     load_path=None,
     **network_kwargs):
