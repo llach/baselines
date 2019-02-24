@@ -20,6 +20,8 @@ from baselines.deepq.utils import ObservationInput
 from baselines.common.tf_util import get_session
 from baselines.deepq.models import build_q_func
 
+from forkan.common.utils import print_dict
+
 from tqdm import tqdm
 
 
@@ -193,11 +195,7 @@ def learn(env,
     sess = get_session()
     set_global_seeds(seed)
 
-    print('Using parameters: ')
-    print('{')
-    for k, v in locals().items():
-        print('     ', k, ': ', v)
-    print('}')
+    print_dict(locals())
 
     q_func = build_q_func(network, **network_kwargs)
 
