@@ -15,6 +15,8 @@ from importlib import import_module
 
 from baselines.common.vec_env.vec_normalize import VecNormalize
 
+from forkan.rl import FakeLazyVAE
+
 try:
     from mpi4py import MPI
 except ImportError:
@@ -62,7 +64,7 @@ def train(args, extra_args):
     alg_kwargs = get_learn_function_defaults(args.alg, env_type)
     alg_kwargs.update(extra_args)
 
-    env = build_env(args)
+    env = build_env(args, **extra_args)
     if args.save_video_interval != 0:
         env = VecVideoRecorder(env, osp.join(logger.Logger.CURRENT.dir, "videos"), record_video_trigger=lambda x: x % args.save_video_interval == 0, video_length=args.save_video_length)
 
@@ -74,6 +76,12 @@ def train(args, extra_args):
 
     print('Training {} on {}:{} with arguments \n{}'.format(args.alg, env_type, env_id, alg_kwargs))
 
+    if 'vae'in extra_args.keys() and extra_args['vae']:
+        more_kwargs = {
+            'vae': env_id.replace('NoFrameskip', '').lower().split('-')[0]
+        }
+        alg_kwargs.update(more_kwargs)
+
     model = learn(
         env=env,
         seed=seed,
@@ -84,7 +92,7 @@ def train(args, extra_args):
     return model, env
 
 
-def build_env(args):
+def build_env(args, vae=False, **extra_args):
     ncpu = multiprocessing.cpu_count()
     if sys.platform == 'darwin': ncpu //= 2
     nenv = args.num_env or ncpu
@@ -115,6 +123,9 @@ def build_env(args):
 
        if env_type == 'mujoco':
            env = VecNormalize(env)
+
+    if vae:
+        env = FakeLazyVAE(env)
 
     return env
 

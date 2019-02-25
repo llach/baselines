@@ -18,6 +18,8 @@ from baselines.common.vec_env.subproc_vec_env import SubprocVecEnv
 from baselines.common.vec_env.dummy_vec_env import DummyVecEnv
 from baselines.common import retro_wrappers
 
+from forkan.rl import LazyVAE
+
 def make_vec_env(env_id, env_type, num_env, seed,
                  wrapper_kwargs=None,
                  start_index=0,
@@ -49,7 +51,8 @@ def make_vec_env(env_id, env_type, num_env, seed,
         return DummyVecEnv([make_thunk(start_index)])
 
 
-def make_env(env_id, env_type, subrank=0, seed=None, reward_scale=1.0, gamestate=None, flatten_dict_observations=True, wrapper_kwargs=None):
+def make_env(env_id, env_type, subrank=0, seed=None, reward_scale=1.0, gamestate=None, flatten_dict_observations=True,
+             wrapper_kwargs=None, vae=None):
     mpi_rank = MPI.COMM_WORLD.Get_rank() if MPI else 0
     wrapper_kwargs = wrapper_kwargs or {}
     if env_type == 'atari':
@@ -72,6 +75,8 @@ def make_env(env_id, env_type, subrank=0, seed=None, reward_scale=1.0, gamestate
 
     if env_type == 'atari':
         env = wrap_deepmind(env, **wrapper_kwargs)
+        if vae:
+            env = LazyVAE(env, load_from=env_id.replace('NoFrameskip', '').lower().split('-')[0])
     elif env_type == 'retro':
         env = retro_wrappers.wrap_deepmind_retro(env, **wrapper_kwargs)
 

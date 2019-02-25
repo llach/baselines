@@ -9,6 +9,7 @@ from baselines.common import set_global_seeds, explained_variance
 from baselines.common import tf_util
 from baselines.common.policies import build_policy
 
+from forkan.models import VAE
 
 from baselines.a2c.utils import Scheduler, find_trainable_variables
 from baselines.a2c.runner import Runner
@@ -32,7 +33,7 @@ class Model(object):
         save/load():
         - Save load the model
     """
-    def __init__(self, policy, env, nsteps,
+    def __init__(self, policy, env, nsteps, process=None,
             ent_coef=0.01, vf_coef=0.5, max_grad_norm=0.5, lr=7e-4,
             alpha=0.99, epsilon=1e-5, total_timesteps=int(80e6), lrschedule='linear'):
 
@@ -106,12 +107,21 @@ class Model(object):
             )
             return policy_loss, value_loss, policy_entropy
 
+        def step(obs, **extra_feed):
+            return self.step_model.step(process(obs), **extra_feed)
+
+        def value(obs, *args, **kwargs):
+            return self.step_model.value(process(obs), *args, **kwargs)
 
         self.train = train
         self.train_model = train_model
         self.step_model = step_model
-        self.step = step_model.step
-        self.value = step_model.value
+        if process is not None:
+            self.step = step
+            self.value = value
+        else:
+            self.step = self.step_model.step
+            self.value = step_model.value
         self.initial_state = step_model.initial_state
         self.save = functools.partial(tf_util.save_variables, sess=sess)
         self.load = functools.partial(tf_util.load_variables, sess=sess)
@@ -135,6 +145,7 @@ def learn(
     reward_average=20,
     log_interval=100,
     load_path=None,
+    vae=None,
     **network_kwargs):
 
     '''
@@ -192,14 +203,29 @@ def learn(
     nenvs = env.num_envs
     policy = build_policy(env, network, **network_kwargs)
 
+    if vae is not None:
+        # vae_sess = tf.Session() is this really needed?
+        va = VAE(load_from=vae)
+
+        def _process(obs):
+            bs = obs.shape[0]
+            obs = np.expand_dims(np.reshape(np.moveaxis(obs, -1, 1), (-1, 84, 84)), -1)
+            obs = obs / 255
+
+            return np.reshape(va.encode(obs).flatten(), (bs, -1))
+
+        process = _process
+    else:
+        process = None
+
     # Instantiate the model object (that creates step_model and train_model)
-    model = Model(policy=policy, env=env, nsteps=nsteps, ent_coef=ent_coef, vf_coef=vf_coef,
+    model = Model(policy=policy, env=env, nsteps=nsteps, ent_coef=ent_coef, vf_coef=vf_coef, process=process,
         max_grad_norm=max_grad_norm, lr=lr, alpha=alpha, epsilon=epsilon, total_timesteps=total_timesteps, lrschedule=lrschedule)
     if load_path is not None:
         model.load(load_path)
 
     # Instantiate the runner object
-    runner = Runner(env, model, nsteps=nsteps, gamma=gamma)
+    runner = Runner(env.env, model, nsteps=nsteps, gamma=gamma)
 
     # Calculate the batch_size
     nbatch = nenvs*nsteps
@@ -214,6 +240,8 @@ def learn(
     for update in tqdm(range(1, total_timesteps//nbatch+1)):
         # Get mini batch of experiences
         obs, states, rewards, masks, actions, values, dones, raw_rewards = runner.run()
+        if process is not None:
+            obs = process(obs)
 
         policy_loss, value_loss, policy_entropy = model.train(obs, states, rewards, masks, actions, values)
         nseconds = time.time()-tstart
