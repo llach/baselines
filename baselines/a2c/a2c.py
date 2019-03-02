@@ -210,7 +210,11 @@ def learn(
 
     env_id_lower = env_id.replace('NoFrameskip', '').lower().split('-')[0]
 
-    savename = '{}-{}-{}-{}'.format(env_id_lower, vae, env.num_envs, datetime.datetime.now().strftime('%Y-%m-%dT%H:%M'))
+    if vae is not None and vae is not '':
+        savename = '{}-{}-nenv{}-{}'.format(env_id_lower, vae, env.num_envs, datetime.datetime.now().strftime('%Y-%m-%dT%H:%M'))
+    else:
+        savename = '{}-noVAE-nenv{}-{}'.format(env_id_lower, env.num_envs, datetime.datetime.now().strftime('%Y-%m-%dT%H:%M'))
+
     savepath = '{}a2c/{}/'.format(model_path, savename)
 
     create_dir('{}a2c/{}/'.format(model_path, savename))
@@ -230,7 +234,7 @@ def learn(
     nenvs = env.num_envs
     policy = build_policy(env, network, **network_kwargs)
 
-    if vae is not None and not '':
+    if vae is not None and vae is not '':
         # vae_sess = tf.Session() is this really needed?
         va = VAE(load_from=vae, network='atari')
 
@@ -252,8 +256,11 @@ def learn(
     if load_path is not None:
         model.load(load_path)
 
-    # Instantiate the runner object
-    runner = Runner(env.env, model, nsteps=nsteps, gamma=gamma)
+    if vae is not None and vae is not '':
+        # Instantiate the runner object
+        runner = Runner(env.env, model, nsteps=nsteps, gamma=gamma)
+    else:
+        runner = Runner(env, model, nsteps=nsteps, gamma=gamma)
 
     # Calculate the batch_size
     nbatch = nenvs*nsteps
