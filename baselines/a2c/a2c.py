@@ -205,14 +205,14 @@ def learn(
 
     if vae is not None:
         # vae_sess = tf.Session() is this really needed?
-        va = VAE(load_from=vae)
+        va = VAE(load_from=vae, network='atari')
 
         def _process(obs):
             bs = obs.shape[0]
             obs = np.expand_dims(np.reshape(np.moveaxis(obs, -1, 1), (-1, 84, 84)), -1)
             obs = obs / 255
 
-            return np.reshape(va.encode(obs).flatten(), (bs, -1))
+            return np.reshape(va.encode(obs)[:2].flatten(), (bs, -1))
 
         process = _process
     else:
@@ -220,7 +220,8 @@ def learn(
 
     # Instantiate the model object (that creates step_model and train_model)
     model = Model(policy=policy, env=env, nsteps=nsteps, ent_coef=ent_coef, vf_coef=vf_coef, process=process,
-        max_grad_norm=max_grad_norm, lr=lr, alpha=alpha, epsilon=epsilon, total_timesteps=total_timesteps, lrschedule=lrschedule)
+                  max_grad_norm=max_grad_norm, lr=lr, alpha=alpha, epsilon=epsilon,
+                  total_timesteps=total_timesteps, lrschedule=lrschedule)
     if load_path is not None:
         model.load(load_path)
 

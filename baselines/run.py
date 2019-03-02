@@ -77,10 +77,16 @@ def train(args, extra_args):
     print('Training {} on {}:{} with arguments \n{}'.format(args.alg, env_type, env_id, alg_kwargs))
 
     if 'vae'in extra_args.keys() and extra_args['vae']:
-        more_kwargs = {
-            'vae': env_id.replace('NoFrameskip', '').lower().split('-')[0]
+        env_id_lower = env_id.replace('NoFrameskip', '').lower().split('-')[0]
+        if env_id_lower not in extra_args['vae']:
+            print('trying to load vae for wrong env!')
+            exit(1)
+
+        vae_kwargs = {
+            'vae': extra_args['vae']
         }
-        alg_kwargs.update(more_kwargs)
+
+        alg_kwargs.update(vae_kwargs)
 
     model = learn(
         env=env,
