@@ -1,5 +1,7 @@
 import time
+import json
 import functools
+import datetime
 import numpy as np
 import tensorflow as tf
 
@@ -9,7 +11,10 @@ from baselines.common import set_global_seeds, explained_variance
 from baselines.common import tf_util
 from baselines.common.policies import build_policy
 
+from forkan import model_path
 from forkan.models import VAE
+from forkan.common.utils import print_dict, create_dir
+from forkan.common.csv_logger import CSVLogger
 
 from baselines.a2c.utils import Scheduler, find_trainable_variables
 from baselines.a2c.runner import Runner
@@ -145,7 +150,8 @@ def learn(
     reward_average=20,
     log_interval=100,
     load_path=None,
-    vae=None,
+    vae='',
+    env_id=None,
     **network_kwargs):
 
     '''
@@ -195,15 +201,36 @@ def learn(
 
     '''
 
-
+    print_dict(locals())
+    params = locals()
+    params.pop('env')
+    params.update({'nenvs': env.num_envs})
 
     set_global_seeds(seed)
+
+    env_id_lower = env_id.replace('NoFrameskip', '').lower().split('-')[0]
+
+    savename = '{}-{}-{}-{}'.format(env_id_lower, vae, env.num_envs, datetime.datetime.now().strftime('%Y-%m-%dT%H:%M'))
+    savepath = '{}a2c/{}/'.format(model_path, savename)
+
+    create_dir('{}a2c/{}/'.format(model_path, savename))
+
+    # store from file anyways
+    with open('{}from'.format(savepath), 'a') as fi:
+        fi.write('{}\n'.format(savename))
+
+    with open('{}/params.json'.format(savepath), 'w') as outfile:
+        json.dump(params, outfile)
+
+    csv_header = ["nupdates", "total_timesteps", "fps", "policy_entropy", "value_loss",
+                  "explained_variance", "mean_reward [{}]".format(reward_average), "nepisodes"]
+    csv = CSVLogger('{}progress.csv'.format(savepath), *csv_header)
 
     # Get the nb of env
     nenvs = env.num_envs
     policy = build_policy(env, network, **network_kwargs)
 
-    if vae is not None:
+    if vae is not None and not '':
         # vae_sess = tf.Session() is this really needed?
         va = VAE(load_from=vae, network='atari')
 
@@ -266,12 +293,17 @@ def learn(
         if np.any(dones):
             nepisodes += 1
 
+        # Calculates if value function is a good predicator of the returns (ev > 1)
+        # or if it's just worse than predicting nothing (ev =< 0)
+        ev = explained_variance(values, rewards)
+
         # Calculate the fps (frame per second)
-        fps = int((update*nbatch)/nseconds)
+        fps = int((update * nbatch) / nseconds)
+
+        csv.writeline(update, update*nbatch, fps, float(policy_entropy), float(value_loss), float(ev),
+                      float(mrew), nepisodes)
+
         if update % log_interval == 0 or update == 1:
-            # Calculates if value function is a good predicator of the returns (ev > 1)
-            # or if it's just worse than predicting nothing (ev =< 0)
-            ev = explained_variance(values, rewards)
             logger.record_tabular("nupdates", update)
             logger.record_tabular("total_timesteps", update*nbatch)
             logger.record_tabular("fps", fps)

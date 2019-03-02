@@ -63,6 +63,7 @@ def train(args, extra_args):
     learn = get_learn_function(args.alg)
     alg_kwargs = get_learn_function_defaults(args.alg, env_type)
     alg_kwargs.update(extra_args)
+    alg_kwargs.update({'env_id': env_id})
 
     env = build_env(args, **extra_args)
     if args.save_video_interval != 0:
