@@ -272,6 +272,8 @@ def learn(
     current_rewards = [0.0] * nenvs
     nepisodes = 0
 
+    best_rew = -np.infty
+
     for update in tqdm(range(1, total_timesteps//nbatch+1)):
         # Get mini batch of experiences
         obs, states, rewards, masks, actions, values, dones, raw_rewards = runner.run()
@@ -300,6 +302,11 @@ def learn(
         if np.any(dones):
             nepisodes += 1
 
+        if mrew > best_rew:
+            logger.log('model improved from {} to {}. saving ...'.format(best_rew, mrew))
+            model.save('{}weights_best'.format(savepath))
+            best_rew = mrew
+
         # Calculates if value function is a good predicator of the returns (ev > 1)
         # or if it's just worse than predicting nothing (ev =< 0)
         ev = explained_variance(values, rewards)
@@ -320,5 +327,8 @@ def learn(
             logger.record_tabular("mean_reward [{}]".format(reward_average), float(mrew))
             logger.record_tabular("nepisodes", nepisodes)
             logger.dump_tabular()
+
+    model.save('{}weights_latest'.format(savepath))
+
     return model
 
