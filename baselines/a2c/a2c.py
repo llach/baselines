@@ -281,7 +281,6 @@ def learn(
             obs = process(obs)
 
         policy_loss, value_loss, policy_entropy = model.train(obs, states, rewards, masks, actions, values)
-        nseconds = time.time()-tstart
 
         for n, (rs, ds) in enumerate(zip(raw_rewards, dones)):
             rs = rs.tolist()
@@ -312,6 +311,7 @@ def learn(
         ev = explained_variance(values, rewards)
 
         # Calculate the fps (frame per second)
+        nseconds = time.time() - tstart
         fps = int((update * nbatch) / nseconds)
 
         csv.writeline(update, update*nbatch, fps, float(policy_entropy), float(value_loss), float(ev),
