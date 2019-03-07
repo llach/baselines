@@ -79,7 +79,7 @@ def train(args, extra_args):
 
     env_id_lower = env_id.replace('NoFrameskip', '').lower().split('-')[0]
 
-    if 'pend' in env_id_lower and 'cnn' in args.network:
+    if ('pend' in env_id_lower and 'cnn' in args.network):# or ('pend' in env_id_lower and args.play):
         env = PendulumRenderEnv(env)
 
     if 'vae'in extra_args.keys() and extra_args['vae']:
@@ -128,8 +128,9 @@ def build_env(args, vae=False, **extra_args):
             frame_stack_size = 4
             env = make_vec_env(env_id, env_type, nenv, seed, gamestate=args.gamestate, reward_scale=args.reward_scale)
             env = VecFrameStack(env, frame_stack_size)
-    elif 'Pend' in env_id and vae:
+    elif ('Pend' in env_id and vae) or ('Pend' in env_id and args.play):
         env = make_env(env_id, env_type, seed=seed)
+        env.__setattr__('num_envs', 1)
     else:
        config = tf.ConfigProto(allow_soft_placement=True,
                                intra_op_parallelism_threads=1,

@@ -25,6 +25,8 @@ from tensorflow import losses
 
 from tqdm import tqdm
 
+import matplotlib.pyplot as plt
+
 
 class Model(object):
 
@@ -276,7 +278,24 @@ def learn(
                   max_grad_norm=max_grad_norm, lr=lr, alpha=alpha, epsilon=epsilon,
                   total_timesteps=total_timesteps, lrschedule=lrschedule)
     if load_path is not None:
+        print('playing model ... ')
         model.load(load_path)
+
+        obs = env.reset()
+
+        ep_t = 0
+        while True:
+
+            action, _, _, _ = model.step(obs)
+            obs, r, d, _ = env.step(action)
+
+            env.render()
+            ep_t += 1
+
+            if np.any(d):
+                print('episode done after {} steps'.format(ep_t))
+                obs = env.reset()
+                ep_t = 0
 
     if vae is not None and vae is not '':
         # Instantiate the runner object
