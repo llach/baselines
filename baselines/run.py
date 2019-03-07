@@ -15,7 +15,7 @@ from importlib import import_module
 
 from baselines.common.vec_env.vec_normalize import VecNormalize
 
-from forkan.rl import FakeLazyVAE
+from forkan.rl import FakeLazyVAE, PendulumRenderEnv
 
 try:
     from mpi4py import MPI
@@ -77,9 +77,18 @@ def train(args, extra_args):
 
     print('Training {} on {}:{} with arguments \n{}'.format(args.alg, env_type, env_id, alg_kwargs))
 
+    env_id_lower = env_id.replace('NoFrameskip', '').lower().split('-')[0]
+
+    if 'pend' in env_id_lower and 'cnn' in args.network:
+        env = PendulumRenderEnv(env)
+
     if 'vae'in extra_args.keys() and extra_args['vae']:
-        env_id_lower = env_id.replace('NoFrameskip', '').lower().split('-')[0]
-        if env_id_lower not in extra_args['vae']:
+        latents = 20
+        if 'pend' in env_id_lower and 'mlp' in args.network:
+            env = PendulumRenderEnv(env)
+            latents = 5
+
+        if extra_args['vae'] not in env_id_lower:
             print('trying to load vae for wrong env!')
             exit(1)
 
@@ -88,6 +97,8 @@ def train(args, extra_args):
         }
 
         alg_kwargs.update(vae_kwargs)
+
+        env = FakeLazyVAE(env, latents)
 
     model = learn(
         env=env,
@@ -117,7 +128,8 @@ def build_env(args, vae=False, **extra_args):
             frame_stack_size = 4
             env = make_vec_env(env_id, env_type, nenv, seed, gamestate=args.gamestate, reward_scale=args.reward_scale)
             env = VecFrameStack(env, frame_stack_size)
-
+    elif 'Pend' in env_id and vae:
+        env = make_env(env_id, env_type, seed=seed)
     else:
        config = tf.ConfigProto(allow_soft_placement=True,
                                intra_op_parallelism_threads=1,
@@ -130,9 +142,6 @@ def build_env(args, vae=False, **extra_args):
 
        if env_type == 'mujoco':
            env = VecNormalize(env)
-
-    if vae:
-        env = FakeLazyVAE(env)
 
     return env
 

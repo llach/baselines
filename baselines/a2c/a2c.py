@@ -202,9 +202,7 @@ def learn(
     '''
 
     print_dict(locals())
-    params = locals()
-    params.pop('env')
-    params.update({'nenvs': env.num_envs})
+
 
     set_global_seeds(seed)
 
@@ -223,8 +221,13 @@ def learn(
     with open('{}from'.format(savepath), 'a') as fi:
         fi.write('{}\n'.format(savename))
 
-    with open('{}/params.json'.format(savepath), 'w') as outfile:
-        json.dump(params, outfile)
+    # params = locals()
+    # params.pop('env')
+    # params.update({'nenvs': env.num_envs})
+    # params.pop('params')
+    #
+    # with open('{}/params.json'.format(savepath), 'w') as outfile:
+    #     json.dump(params, outfile)
 
     csv_header = ["nupdates", "total_timesteps", "fps", "policy_entropy", "value_loss",
                   "explained_variance", "mean_reward [{}]".format(reward_average), "nepisodes"]
@@ -234,16 +237,33 @@ def learn(
     nenvs = env.num_envs
     policy = build_policy(env, network, **network_kwargs)
 
+    # Calculate the batch_size
+    nbatch = nenvs * nsteps
+
     if vae is not None and vae is not '':
         # vae_sess = tf.Session() is this really needed?
-        va = VAE(load_from=vae, network='atari')
+
+        if 'pend' in env_id_lower:
+            network = 'pendulum'
+            rec_shape = [-1, 64, 64]
+            norma = False
+        else:
+            network = 'atari'
+            rec_shape = [-1, 84, 84]
+            norma = True
+
+        va = VAE(load_from=vae, network=network)
 
         def _process(obs):
-            bs = obs.shape[0]
-            obs = np.expand_dims(np.reshape(np.moveaxis(obs, -1, 1), (-1, 84, 84)), -1)
-            obs = obs / 255
+            if obs.shape[0] == nsteps or obs.shape[0] == nbatch:
+                bs = obs.shape[0]
+            else:
+                bs = 1
+            obs = np.expand_dims(np.reshape(np.moveaxis(obs, -1, 1), rec_shape), -1)
+            if norma: obs = obs / 255
+            ff = va.encode(obs)[:2].flatten()
 
-            return np.reshape(va.encode(obs)[:2].flatten(), (bs, -1))
+            return np.reshape(ff, (bs, -1))
 
         process = _process
     else:
@@ -261,9 +281,6 @@ def learn(
         runner = Runner(env.env, model, nsteps=nsteps, gamma=gamma)
     else:
         runner = Runner(env, model, nsteps=nsteps, gamma=gamma)
-
-    # Calculate the batch_size
-    nbatch = nenvs*nsteps
 
     # Start total timer
     tstart = time.time()

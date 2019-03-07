@@ -6,6 +6,8 @@ import tensorflow as tf
 import zipfile
 import cloudpickle
 import numpy as np
+import datetime
+import json
 
 import baselines.common.tf_util as U
 from baselines.common.tf_util import load_variables, save_variables
@@ -20,7 +22,11 @@ from baselines.deepq.utils import ObservationInput
 from baselines.common.tf_util import get_session
 from baselines.deepq.models import build_q_func
 
-from forkan.common.utils import print_dict
+from forkan import model_path
+from forkan.models import VAE
+from forkan.common.utils import print_dict, create_dir
+from forkan.common.csv_logger import CSVLogger
+
 
 from tqdm import tqdm
 
@@ -121,6 +127,8 @@ def learn(env,
           param_noise=False,
           callback=None,
           load_path=None,
+          vae='',
+          env_id=None,
           **network_kwargs
             ):
     """Train a deepq model.
@@ -196,6 +204,48 @@ def learn(env,
     set_global_seeds(seed)
 
     print_dict(locals())
+    params = locals()
+    params.pop('env')
+    params.pop('sess')
+
+    set_global_seeds(seed)
+
+    env_id_lower = env_id.replace('NoFrameskip', '').lower().split('-')[0]
+
+    if vae is not None and vae is not '':
+        savename = '{}-{}-nenv{}-{}'.format(env_id_lower, vae, env.num_envs,
+                                            datetime.datetime.now().strftime('%Y-%m-%dT%H:%M'))
+    else:
+        savename = '{}-noVAE-nenv{}-{}'.format(env_id_lower, env.num_envs,
+                                               datetime.datetime.now().strftime('%Y-%m-%dT%H:%M'))
+
+    savepath = '{}dqn/{}/'.format(model_path, savename)
+
+    create_dir('{}dqn/{}/'.format(model_path, savename))
+
+    # store from file anyways
+    with open('{}from'.format(savepath), 'a') as fi:
+        fi.write('{}\n'.format(savename))
+
+    # with open('{}/params.json'.format(savepath), 'w') as outfile:
+    #     json.dump(params, outfile)
+
+    csv_header = ["nepisodes", "total_timesteps", "fps", "mean_reward [20]"]
+    csv = CSVLogger('{}progress.csv'.format(savepath), *csv_header)
+
+    if vae is not None and vae is not '':
+        # vae_sess = tf.Session() is this really needed?
+        va = VAE(load_from=vae, network='pendulum')
+
+        def _process(obs):
+            bs = obs.shape[0]
+            obs = np.expand_dims(np.reshape(np.moveaxis(obs, -1, 1), (-1, 64, 64)), -1)
+
+            return np.reshape(va.encode(obs)[:2].flatten(), (bs, -1))
+
+        process = _process
+    else:
+        process = None
 
     q_func = build_q_func(network, **network_kwargs)
 
@@ -288,6 +338,10 @@ def learn(env,
             env_action = action
             reset = False
             new_obs, rew, done, _ = env.step(env_action)
+
+            if vae:
+                new_obs = _process(new_obs)
+
             # Store transition in the replay buffer.
             replay_buffer.add(obs, action, rew, new_obs, float(done))
             obs = new_obs
@@ -318,27 +372,30 @@ def learn(env,
                 # Update target network periodically.
                 update_target()
 
-            mean_100ep_reward = round(np.mean(episode_rewards[-101:-1]), 1)
+            mean_20ep_reward = round(np.mean(episode_rewards[-21:-1]), 1)
             num_episodes = len(episode_rewards)
+
+            csv.writeline(num_episodes, t, fps, mean_20ep_reward)
+
             if done and print_freq is not None and len(episode_rewards) % print_freq == 0:
                 nseconds = time.time() - tstart
                 fps = int(t/nseconds)
                 logger.record_tabular("steps", t)
                 logger.record_tabular("fps", fps)
                 logger.record_tabular("episodes", num_episodes)
-                logger.record_tabular("mean 100 episode reward", mean_100ep_reward)
+                logger.record_tabular("mean 20 episode reward", mean_20ep_reward)
                 logger.record_tabular("% time spent exploring", int(100 * exploration.value(t)))
                 logger.dump_tabular()
 
             if (checkpoint_freq is not None and t > learning_starts and
                     num_episodes > 100 and t % checkpoint_freq == 0):
-                if saved_mean_reward is None or mean_100ep_reward > saved_mean_reward:
+                if saved_mean_reward is None or mean_20ep_reward > saved_mean_reward:
                     if print_freq is not None:
                         logger.log("Saving model due to mean reward increase: {} -> {}".format(
-                                   saved_mean_reward, mean_100ep_reward))
-                    save_variables(model_file)
+                                   saved_mean_reward, mean_20ep_reward))
+                    save_variables(savepath)
                     model_saved = True
-                    saved_mean_reward = mean_100ep_reward
+                    saved_mean_reward = mean_20ep_reward
         if model_saved:
             if print_freq is not None:
                 logger.log("Restored model with mean reward: {}".format(saved_mean_reward))
