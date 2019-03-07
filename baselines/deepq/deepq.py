@@ -230,7 +230,7 @@ def learn(env,
     # with open('{}/params.json'.format(savepath), 'w') as outfile:
     #     json.dump(params, outfile)
 
-    csv_header = ["nepisodes", "total_timesteps", "fps", "mean_reward [20]"]
+    csv_header = ['timestamp', "nepisodes", "total_timesteps", "fps", "mean_reward [20]"]
     csv = CSVLogger('{}progress.csv'.format(savepath), *csv_header)
 
     if vae is not None and vae is not '':
@@ -375,7 +375,7 @@ def learn(env,
             mean_20ep_reward = round(np.mean(episode_rewards[-21:-1]), 1)
             num_episodes = len(episode_rewards)
 
-            csv.writeline(num_episodes, t, fps, mean_20ep_reward)
+            csv.writeline(datetime.datetime.now().isoformat(), num_episodes, t, fps, mean_20ep_reward)
 
             if done and print_freq is not None and len(episode_rewards) % print_freq == 0:
                 nseconds = time.time() - tstart

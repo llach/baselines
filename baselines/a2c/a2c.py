@@ -19,6 +19,8 @@ from forkan.common.csv_logger import CSVLogger
 from baselines.a2c.utils import Scheduler, find_trainable_variables
 from baselines.a2c.runner import Runner
 
+import datetime
+
 from tensorflow import losses
 
 from tqdm import tqdm
@@ -229,7 +231,7 @@ def learn(
     # with open('{}/params.json'.format(savepath), 'w') as outfile:
     #     json.dump(params, outfile)
 
-    csv_header = ["nupdates", "total_timesteps", "fps", "policy_entropy", "value_loss",
+    csv_header = ['timestamp', "nupdates", "total_timesteps", "fps", "policy_entropy", "value_loss",
                   "explained_variance", "mean_reward [{}]".format(reward_average), "nepisodes"]
     csv = CSVLogger('{}progress.csv'.format(savepath), *csv_header)
 
@@ -331,7 +333,7 @@ def learn(
         nseconds = time.time() - tstart
         fps = int((update * nbatch) / nseconds)
 
-        csv.writeline(update, update*nbatch, fps, float(policy_entropy), float(value_loss), float(ev),
+        csv.writeline(datetime.datetime.now().isoformat(), update, update*nbatch, fps, float(policy_entropy), float(value_loss), float(ev),
                       float(mrew), nepisodes)
 
         if update % log_interval == 0 or update == 1:
