@@ -8,7 +8,7 @@ import numpy as np
 
 from baselines.common.vec_env.vec_video_recorder import VecVideoRecorder
 from baselines.common.vec_env.vec_frame_stack import VecFrameStack
-from baselines.common.cmd_util import common_arg_parser, parse_unknown_args, make_vec_env, make_env
+from baselines.common.cmd_util import common_arg_parser, parse_unknown_args, make_vec_env, make_env, make_dummy_vec_env
 from baselines.common.tf_util import get_session
 from baselines import logger
 from importlib import import_module
@@ -85,7 +85,6 @@ def train(args, extra_args):
     if 'vae'in extra_args.keys() and extra_args['vae']:
         latents = 20
         if 'pend' in env_id_lower and 'mlp' in args.network:
-            env = PendulumRenderEnv(env)
             latents = 5
 
         if extra_args['vae'] not in env_id_lower:
@@ -129,8 +128,9 @@ def build_env(args, vae=False, **extra_args):
             env = make_vec_env(env_id, env_type, nenv, seed, gamestate=args.gamestate, reward_scale=args.reward_scale)
             env = VecFrameStack(env, frame_stack_size)
     elif ('Pend' in env_id and vae) or ('Pend' in env_id and args.play):
-        env = make_env(env_id, env_type, seed=seed)
-        env.__setattr__('num_envs', 1)
+        flatten_dict_observations = alg not in {'her'}
+        env = make_dummy_vec_env(env_id, env_type, args.num_env or 1, seed, reward_scale=args.reward_scale,
+                                 flatten_dict_observations=flatten_dict_observations, vae_pend=True)
     else:
        config = tf.ConfigProto(allow_soft_placement=True,
                                intra_op_parallelism_threads=1,
