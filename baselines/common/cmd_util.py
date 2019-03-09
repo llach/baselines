@@ -18,7 +18,7 @@ from baselines.common.vec_env.subproc_vec_env import SubprocVecEnv
 from baselines.common.vec_env.dummy_vec_env import DummyVecEnv
 from baselines.common import retro_wrappers
 
-from forkan.rl import LazyVAE, PendulumRenderEnv
+from forkan.rl import LazyVAE, PendulumRenderEnv, PendulumRenderVAEEnv
 
 
 def make_vec_env(env_id, env_type, num_env, seed,
@@ -117,6 +117,7 @@ def make_env(env_id, env_type, subrank=0, seed=None, reward_scale=1.0, gamestate
 
     if vae_pend:
         env = PendulumRenderEnv(env)
+        env = PendulumRenderVAEEnv(env)
 
     return env
 

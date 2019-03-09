@@ -15,7 +15,7 @@ from importlib import import_module
 
 from baselines.common.vec_env.vec_normalize import VecNormalize
 
-from forkan.rl import FakeLazyVAE, PendulumRenderEnv
+from forkan.rl import FakeLazyVAE, PendulumRenderEnv, PendulumRenderVAEEnv
 
 try:
     from mpi4py import MPI
@@ -87,7 +87,7 @@ def train(args, extra_args):
         if 'pend' in env_id_lower and 'mlp' in args.network:
             latents = 5
 
-        if extra_args['vae'] not in env_id_lower:
+        if extra_args['vae'].split('-')[0] not in env_id_lower:
             print('trying to load vae for wrong env!')
             exit(1)
 
@@ -127,6 +127,11 @@ def build_env(args, vae=False, **extra_args):
             frame_stack_size = 4
             env = make_vec_env(env_id, env_type, nenv, seed, gamestate=args.gamestate, reward_scale=args.reward_scale)
             env = VecFrameStack(env, frame_stack_size)
+    elif 'pendulum_vae'in extra_args.keys():
+        flatten_dict_observations = alg not in {'her'}
+        env = make_dummy_vec_env(env_id, env_type, args.num_env or 1, seed, reward_scale=args.reward_scale,
+                                 flatten_dict_observations=flatten_dict_observations, vae_pend=True)
+        extra_args.pop('pendulum_vae')
     elif ('Pend' in env_id and vae) or ('Pend' in env_id and args.play):
         flatten_dict_observations = alg not in {'her'}
         env = make_dummy_vec_env(env_id, env_type, args.num_env or 1, seed, reward_scale=args.reward_scale,
