@@ -206,7 +206,7 @@ def learn(
     '''
 
     print_dict(locals())
-    network_kwargs.pop('pendulum_vae')
+    # network_kwargs.pop('pendulum_vae')
 
     set_global_seeds(seed)
 

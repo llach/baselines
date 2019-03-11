@@ -58,7 +58,7 @@ def make_dummy_vec_env(env_id, env_type, num_env, seed,
                        reward_scale=1.0,
                        flatten_dict_observations=True,
                        gamestate=None,
-                       vae_pend=False):
+                       wrapper_fn=None):
     """
     Create a wrapped, monitored SubprocVecEnv for Atari and MuJoCo.
     """
@@ -76,7 +76,7 @@ def make_dummy_vec_env(env_id, env_type, num_env, seed,
             gamestate=gamestate,
             flatten_dict_observations=flatten_dict_observations,
             wrapper_kwargs=wrapper_kwargs,
-            vae_pend=vae_pend,
+            wrapper_fn=wrapper_fn,
         )
 
     set_global_seeds(seed)
@@ -84,7 +84,7 @@ def make_dummy_vec_env(env_id, env_type, num_env, seed,
 
 
 def make_env(env_id, env_type, subrank=0, seed=None, reward_scale=1.0, gamestate=None, flatten_dict_observations=True,
-             wrapper_kwargs=None, vae=None, vae_pend=False):
+             wrapper_kwargs=None, vae=None, wrapper_fn=None):
     mpi_rank = MPI.COMM_WORLD.Get_rank() if MPI else 0
     wrapper_kwargs = wrapper_kwargs or {}
     if env_type == 'atari':
@@ -115,9 +115,8 @@ def make_env(env_id, env_type, subrank=0, seed=None, reward_scale=1.0, gamestate
     if reward_scale != 1:
         env = retro_wrappers.RewardScaler(env, reward_scale)
 
-    if vae_pend:
-        env = PendulumRenderEnv(env)
-        env = PendulumRenderVAEEnv(env)
+    if wrapper_fn:
+        env = wrapper_fn(env)
 
     return env
 

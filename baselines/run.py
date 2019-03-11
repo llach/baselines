@@ -53,7 +53,7 @@ _game_envs['retro'] = {
 }
 
 
-def train(args, extra_args):
+def train(args, extra_args, build_env_fn):
     env_type, env_id = get_env_type(args.env)
     print('env_type: {}'.format(env_type))
 
@@ -65,7 +65,7 @@ def train(args, extra_args):
     alg_kwargs.update(extra_args)
     alg_kwargs.update({'env_id': env_id})
 
-    env = build_env(args, **extra_args)
+    env = build_env_fn(args, **extra_args)
     if args.save_video_interval != 0:
         env = VecVideoRecorder(env, osp.join(logger.Logger.CURRENT.dir, "videos"), record_video_trigger=lambda x: x % args.save_video_interval == 0, video_length=args.save_video_length)
 
@@ -127,15 +127,6 @@ def build_env(args, vae=False, **extra_args):
             frame_stack_size = 4
             env = make_vec_env(env_id, env_type, nenv, seed, gamestate=args.gamestate, reward_scale=args.reward_scale)
             env = VecFrameStack(env, frame_stack_size)
-    elif 'pendulum_vae'in extra_args.keys():
-        flatten_dict_observations = alg not in {'her'}
-        env = make_dummy_vec_env(env_id, env_type, args.num_env or 1, seed, reward_scale=args.reward_scale,
-                                 flatten_dict_observations=flatten_dict_observations, vae_pend=True)
-        extra_args.pop('pendulum_vae')
-    elif ('Pend' in env_id and vae) or ('Pend' in env_id and args.play):
-        flatten_dict_observations = alg not in {'her'}
-        env = make_dummy_vec_env(env_id, env_type, args.num_env or 1, seed, reward_scale=args.reward_scale,
-                                 flatten_dict_observations=flatten_dict_observations, vae_pend=True)
     else:
        config = tf.ConfigProto(allow_soft_placement=True,
                                intra_op_parallelism_threads=1,
@@ -167,7 +158,7 @@ def get_env_type(env_id):
             if env_id in e:
                 env_type = g
                 break
-        assert env_type is not None, 'env_id {} is not recognized in env types'.format(env_id, _game_envs.keys())
+        # assert env_type is not None, 'env_id {} is not recognized in env types'.format(env_id, _game_envs.keys())
 
     return env_type, env_id
 
@@ -220,7 +211,7 @@ def parse_cmdline_kwargs(args):
 
 
 
-def main(args):
+def main(args, build_fn=None):
     # configure logger, disable logging in child MPI processes (with rank > 0)
 
     arg_parser = common_arg_parser()
@@ -237,7 +228,7 @@ def main(args):
         logger.configure(format_strs=[])
         rank = MPI.COMM_WORLD.Get_rank()
 
-    model, env = train(args, extra_args)
+    model, env = train(args, extra_args, build_env_fn=build_fn or build_env)
     env.close()
 
     if args.save_path is not None and rank == 0:
