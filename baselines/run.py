@@ -103,6 +103,7 @@ def train(args, extra_args, build_env_fn):
         env=env,
         seed=seed,
         total_timesteps=total_timesteps,
+        play=args.play,
         **alg_kwargs
     )
 
@@ -230,10 +231,6 @@ def main(args, build_fn=None):
 
     model, env = train(args, extra_args, build_env_fn=build_fn or build_env)
     env.close()
-
-    if args.save_path is not None and rank == 0:
-        save_path = osp.expanduser(args.save_path)
-        model.save(save_path)
 
     if args.play:
         logger.log("Running trained model")
