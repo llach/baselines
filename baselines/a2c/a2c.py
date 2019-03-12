@@ -11,9 +11,8 @@ from baselines.common import set_global_seeds, explained_variance
 from baselines.common import tf_util
 from baselines.common.policies import build_policy
 
-from forkan import model_path
 from forkan.models import VAE
-from forkan.common.utils import print_dict, create_dir
+from forkan.common.utils import log_alg
 from forkan.common.csv_logger import CSVLogger
 
 from baselines.a2c.utils import Scheduler, find_trainable_variables
@@ -157,6 +156,7 @@ def learn(
     vae='',
     env_id=None,
     play=False,
+    save=True,
     **network_kwargs):
 
     '''
@@ -206,33 +206,11 @@ def learn(
 
     '''
 
-    print_dict(locals())
-    # network_kwargs.pop('pendulum_vae')
+
 
     set_global_seeds(seed)
 
-    env_id_lower = env_id.replace('NoFrameskip', '').lower().split('-')[0]
-
-    if vae is not None and vae is not '':
-        savename = '{}-{}-nenv{}-{}'.format(env_id_lower, vae, env.num_envs, datetime.datetime.now().strftime('%Y-%m-%dT%H:%M'))
-    else:
-        savename = '{}-noVAE-nenv{}-{}'.format(env_id_lower, env.num_envs, datetime.datetime.now().strftime('%Y-%m-%dT%H:%M'))
-
-    savepath = '{}a2c/{}/'.format(model_path, savename)
-
-    create_dir('{}a2c/{}/'.format(model_path, savename))
-
-    # store from file anyways
-    with open('{}from'.format(savepath), 'a') as fi:
-        fi.write('{}\n'.format(savename))
-
-    # params = locals()
-    # params.pop('env')
-    # params.update({'nenvs': env.num_envs})
-    # params.pop('params')
-    #
-    # with open('{}/params.json'.format(savepath), 'w') as outfile:
-    #     json.dump(params, outfile)
+    savepath, env_id_lower = log_alg('a2c', env_id, locals(), vae, num_envs=env.num_envs, save=save)
 
     csv_header = ['timestamp', "nupdates", "total_timesteps", "fps", "policy_entropy", "value_loss",
                   "explained_variance", "mean_reward [{}]".format(reward_average), "nepisodes"]
