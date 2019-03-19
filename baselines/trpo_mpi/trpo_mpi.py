@@ -175,7 +175,7 @@ def learn(*,
         savepath, env_id_lower = log_alg('trpo', env_id, locals(), vae, num_envs=nworkers, save=save)
 
         csv_header = ['timestamp', "total_timesteps", "policy_entropy", "value_loss", 'mean_kl',
-                      "explained_variance", "mean_reward [40]", "nepisodes"]
+                      "explained_variance", "mean_reward [40]", "nepisodes", 'fps']
         csv = CSVLogger('{}progress.csv'.format(savepath), *csv_header)
 
     cpus_per_worker = 1
@@ -404,14 +404,18 @@ def learn(*,
         timesteps_so_far += sum(lens)
         iters_so_far += 1
 
+        # Calculate the fps (frame per second)
+        nseconds = time.time() - tstart
+        fps = int(timesteps_so_far / nseconds)
+
         logger.record_tabular("EpisodesSoFar", episodes_so_far)
         logger.record_tabular("TimestepsSoFar", timesteps_so_far)
-        logger.record_tabular("TimeElapsed", time.time() - tstart)
+        logger.record_tabular("FPS", fps)
 
         if rank==0:
             logger.dump_tabular()
             csv.writeline(datetime.datetime.now().isoformat(), timesteps_so_far, meanlosses[-1], np.mean(vpredbefore),
-                          meanlosses[1], ev, np.mean(rewbuffer), episodes_so_far)
+                          meanlosses[1], ev, np.mean(rewbuffer), episodes_so_far, fps)
 
     return pi
 
