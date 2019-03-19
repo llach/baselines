@@ -185,6 +185,7 @@ def learn(*,
             intra_op_parallelism_threads=cpus_per_worker,
     )
     config.gpu_options.allow_growth = True
+    config.gpu_options.per_process_gpu_memory_fraction = 0.24
     U.get_session(config=config)
 
 
