@@ -179,11 +179,13 @@ def learn(*,
         csv = CSVLogger('{}progress.csv'.format(savepath), *csv_header)
 
     cpus_per_worker = 1
-    U.get_session(config=tf.ConfigProto(
+    config =tf.ConfigProto(
             allow_soft_placement=True,
             inter_op_parallelism_threads=cpus_per_worker,
-            intra_op_parallelism_threads=cpus_per_worker
-    ))
+            intra_op_parallelism_threads=cpus_per_worker,
+    )
+    config.gpu_options.allow_growth = True
+    U.get_session(config=config)
 
 
     policy = build_policy(env, network, value_network='copy', **network_kwargs)
