@@ -63,7 +63,6 @@ def train(args, extra_args, build_env_fn):
     learn = get_learn_function(args.alg)
     alg_kwargs = get_learn_function_defaults(args.alg, env_type)
     alg_kwargs.update(extra_args)
-    alg_kwargs.update({'env_id': env_id})
 
     env = build_env_fn(args, **extra_args)
     if args.save_video_interval != 0:
@@ -79,30 +78,11 @@ def train(args, extra_args, build_env_fn):
 
     env_id_lower = env_id.replace('NoFrameskip', '').lower().split('-')[0]
 
-    if ('pend' in env_id_lower and 'cnn' in args.network):# or ('pend' in env_id_lower and args.play):
-        env = PendulumRenderEnv(env)
-
-    if 'vae'in extra_args.keys() and extra_args['vae']:
-        latents = 20
-        if 'pend' in env_id_lower and 'mlp' in args.network:
-            latents = 5
-
-        if extra_args['vae'].split('-')[0] not in env_id_lower:
-            print('trying to load vae for wrong env!')
-            exit(1)
-
-        vae_kwargs = {
-            'vae': extra_args['vae']
-        }
-
-        alg_kwargs.update(vae_kwargs)
-
-        env = FakeLazyVAE(env, latents)
-
     model = learn(
         env=env,
         seed=seed,
         total_timesteps=total_timesteps,
+        env_id=env_id,
         play=args.play,
         **alg_kwargs
     )

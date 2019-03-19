@@ -12,6 +12,11 @@ from baselines.common.input import observation_placeholder
 from baselines.common.policies import build_policy
 from contextlib import contextmanager
 
+from forkan.common.utils import log_alg
+from forkan.common.csv_logger import CSVLogger
+
+import datetime
+
 try:
     from mpi4py import MPI
 except ImportError:
@@ -103,6 +108,9 @@ def learn(*,
         max_episodes=0, max_iters=0,  # time constraint
         callback=None,
         load_path=None,
+        env_id='',
+        play=False,
+        save=True,
         **network_kwargs
         ):
     '''
@@ -156,6 +164,19 @@ def learn(*,
     else:
         nworkers = 1
         rank = 0
+
+    if rank==0:
+        if hasattr(env, 'vae_name'):
+            vae = env.vae_name
+        else:
+            vae = ''
+
+        # setup logging
+        savepath, env_id_lower = log_alg('trpo', env_id, locals(), vae, num_envs=nworkers, save=save)
+
+        csv_header = ['timestamp', "total_timesteps", "policy_entropy", "value_loss", 'mean_kl',
+                      "explained_variance", "mean_reward [40]", "nepisodes"]
+        csv = CSVLogger('{}progress.csv'.format(savepath), *csv_header)
 
     cpus_per_worker = 1
     U.get_session(config=tf.ConfigProto(
@@ -362,8 +383,9 @@ def learn(*,
                 include_final_partial_batch=False, batch_size=64):
                     g = allmean(compute_vflossandgrad(mbob, mbret))
                     vfadam.update(g, vf_stepsize)
-
-        logger.record_tabular("ev_tdlam_before", explained_variance(vpredbefore, tdlamret))
+        ev = explained_variance(vpredbefore, tdlamret)
+        logger.record_tabular("ev_tdlam_before", ev)
+        logger.record_tabular("vf_loss_before", np.mean(vpredbefore))
 
         lrlocal = (seg["ep_lens"], seg["ep_rets"]) # local values
         if MPI is not None:
@@ -388,6 +410,8 @@ def learn(*,
 
         if rank==0:
             logger.dump_tabular()
+            csv.writeline(datetime.datetime.now().isoformat(), timesteps_so_far, meanlosses[-1], np.mean(vpredbefore),
+                          meanlosses[1], ev, np.mean(rewbuffer), episodes_so_far)
 
     return pi
 
