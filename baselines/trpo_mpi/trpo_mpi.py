@@ -417,6 +417,14 @@ def learn(*,
             csv.writeline(datetime.datetime.now().isoformat(), timesteps_so_far, meanlosses[-1], np.mean(vpredbefore),
                           meanlosses[1], ev, np.mean(rewbuffer), episodes_so_far, fps)
 
+            steps2go = total_timesteps - timesteps_so_far
+            secs2go = steps2go / fps
+            min2go = secs2go / 60
+
+            hrs = int(min2go//60)
+            mins = int(min2go) % 60
+            print(colorize('ETA: {}h {}min'.format(hrs, mins), color='cyan'))
+
     return pi
 
 def flatten_lists(listoflists):
