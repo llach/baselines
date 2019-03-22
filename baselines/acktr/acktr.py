@@ -1,6 +1,7 @@
 import os.path as osp
 import time
 import functools
+import datetime
 import numpy as np
 import tensorflow as tf
 
@@ -16,6 +17,8 @@ from baselines.acktr import kfac
 
 from tqdm import tqdm
 
+from forkan.common.utils import log_alg
+from forkan.common.csv_logger import CSVLogger
 
 class Model(object):
 
@@ -97,12 +100,16 @@ class Model(object):
 def learn(network, env, seed, total_timesteps=int(40e6), gamma=0.99, log_interval=1, nprocs=32, nsteps=20,
                  ent_coef=0.01, vf_coef=0.5, vf_fisher_coef=1.0, lr=0.25, max_grad_norm=0.5,
                  kfac_clip=0.001, save_interval=None, lrschedule='linear', load_path=None, is_async=True,
-          reward_average=20, **network_kwargs):
+          reward_average=20, vae='', env_id=None, play=False, save=True, **network_kwargs):
     set_global_seeds(seed)
-
 
     if network == 'cnn':
         network_kwargs['one_dim_bias'] = True
+
+    savepath, env_id_lower = log_alg('acktr', env_id, locals(), vae, num_envs=env.num_envs, save=save)
+    csv_header = ['timestamp', "nupdates", "total_timesteps", "fps", "policy_entropy", "value_loss",
+                  "explained_variance", "mean_reward [{}]".format(reward_average), "nepisodes"]
+    csv = CSVLogger('{}progress.csv'.format(savepath), *csv_header)
 
     policy = build_policy(env, network, **network_kwargs)
 
@@ -162,13 +169,17 @@ def learn(network, env, seed, total_timesteps=int(40e6), gamma=0.99, log_interva
         nseconds = time.time()-tstart
         fps = int((update*nbatch)/nseconds)
 
-        if update % log_interval == 0 or update == 1:
+        try:
+            ev = explained_variance(values, rewards)
+        except:
+            print("caught ev calc error")
+            ev = -5
 
-            try:
-                ev = explained_variance(values, rewards)
-            except:
-                print("caught ev calc error")
-                ev = -5
+        csv.writeline(datetime.datetime.now().isoformat(), update, update * nbatch, fps, float(policy_entropy),
+                      float(value_loss), float(ev),
+                      float(mrew), nepisodes)
+
+        if update % log_interval == 0 or update == 1:
 
             logger.record_tabular("nupdates", update)
             logger.record_tabular("total_timesteps", update*nbatch)

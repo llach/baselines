@@ -19,6 +19,9 @@ from baselines.acer.runner import Runner
 
 from tqdm import tqdm
 
+from forkan.common.utils import log_alg
+from forkan.common.csv_logger import CSVLogger
+
 # remove last step
 def strip(var, nenvs, nsteps, flat = False):
     vars = batch_to_seq(var, nenvs, nsteps + 1, flat)
@@ -276,8 +279,8 @@ class Acer():
 def learn(network, env, seed=None, nsteps=20, total_timesteps=int(80e6), q_coef=0.5, ent_coef=0.01,
           max_grad_norm=10, lr=7e-4, lrschedule='linear', rprop_epsilon=1e-5, rprop_alpha=0.99, gamma=0.99,
           log_interval=100, buffer_size=50000, replay_ratio=4, replay_start=10000, c=10.0,
-          trust_region=True, alpha=0.99, delta=1, load_path=None, **network_kwargs):
-
+          trust_region=True, alpha=0.99, delta=1, load_path=None, vae='', env_id=None, play=False, save=True,
+          **network_kwargs):
     '''
     Main entrypoint for ACER (Actor-Critic with Experience Replay) algorithm (https://arxiv.org/pdf/1611.01224.pdf)
     Train an agent with given network architecture on a given environment using ACER.
@@ -347,6 +350,8 @@ def learn(network, env, seed=None, nsteps=20, total_timesteps=int(80e6), q_coef=
     set_global_seeds(seed)
     if not isinstance(env, VecFrameStack):
         env = VecFrameStack(env, 1)
+
+    savepath, env_id_lower = log_alg('a2c', env_id, locals(), vae, num_envs=env.num_envs, save=save)
 
     policy = build_policy(env, network, estimate_q=True, **network_kwargs)
     nenvs = env.num_envs
