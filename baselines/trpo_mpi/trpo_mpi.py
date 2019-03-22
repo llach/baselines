@@ -179,15 +179,11 @@ def learn(*,
         csv = CSVLogger('{}progress.csv'.format(savepath), *csv_header)
 
     cpus_per_worker = 1
-    config =tf.ConfigProto(
-            allow_soft_placement=True,
-            inter_op_parallelism_threads=cpus_per_worker,
-            intra_op_parallelism_threads=cpus_per_worker,
-    )
-    config.gpu_options.allow_growth = True
-    config.gpu_options.per_process_gpu_memory_fraction = 0.24
-    U.get_session(config=config)
-
+    U.get_session(config=tf.ConfigProto(
+        allow_soft_placement=True,
+        inter_op_parallelism_threads=cpus_per_worker,
+        intra_op_parallelism_threads=cpus_per_worker
+    ))
 
     policy = build_policy(env, network, value_network='copy', **network_kwargs)
     set_global_seeds(seed)
