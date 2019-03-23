@@ -11,7 +11,6 @@ from baselines.common import set_global_seeds, explained_variance
 from baselines.common import tf_util
 from baselines.common.policies import build_policy
 
-from forkan.models import VAE
 from forkan.common.utils import log_alg
 from forkan.common.csv_logger import CSVLogger
 
@@ -153,7 +152,6 @@ def learn(
     reward_average=20,
     log_interval=100,
     load_path=None,
-    vae='',
     env_id=None,
     play=False,
     save=True,
@@ -210,7 +208,10 @@ def learn(
 
     set_global_seeds(seed)
 
-    savepath, env_id_lower = log_alg('a2c', env_id, locals(), vae, num_envs=env.num_envs, save=save)
+    if hasattr(env, 'vae_name'):
+        vae = env.vae_name.split('lat')[0][:-1]
+
+    savepath, env_id_lower = log_alg('a2c', env_id, locals(), vae, num_envs=env.num_envs, save=save, lr=lr)
 
     csv_header = ['timestamp', "nupdates", "total_timesteps", "fps", "policy_entropy", "value_loss",
                   "explained_variance", "mean_reward [{}]".format(reward_average), "nepisodes"]
@@ -223,39 +224,11 @@ def learn(
     # Calculate the batch_size
     nbatch = nenvs * nsteps
 
-    if vae is not None and vae is not '':
-        # vae_sess = tf.Session() is this really needed?
-
-        if 'pend' in env_id_lower:
-            network = 'pendulum'
-            rec_shape = [-1, 64, 64]
-            norma = False
-        else:
-            network = 'atari'
-            rec_shape = [-1, 84, 84]
-            norma = True
-
-        va = VAE(load_from=vae, network=network)
-
-        def _process(obs):
-            if obs.shape[0] == nsteps or obs.shape[0] == nbatch:
-                bs = obs.shape[0]
-            else:
-                bs = 1
-            obs = np.expand_dims(np.reshape(np.moveaxis(obs, -1, 1), rec_shape), -1)
-            if norma: obs = obs / 255
-            ff = va.encode(obs)[:2].flatten()
-
-            return np.reshape(ff, (bs, -1))
-
-        process = _process
-    else:
-        process = None
-
     # Instantiate the model object (that creates step_model and train_model)
-    model = Model(policy=policy, env=env, nsteps=nsteps, ent_coef=ent_coef, vf_coef=vf_coef, process=process,
+    model = Model(policy=policy, env=env, nsteps=nsteps, ent_coef=ent_coef, vf_coef=vf_coef,
                   max_grad_norm=max_grad_norm, lr=lr, alpha=alpha, epsilon=epsilon,
                   total_timesteps=total_timesteps, lrschedule=lrschedule)
+
     if load_path is not None:
         print('loading model ... ')
         model.load(load_path)
@@ -263,11 +236,7 @@ def learn(
         if play:
             return model
 
-    if vae is not None and vae is not '':
-        # Instantiate the runner object
-        runner = Runner(env.env, model, nsteps=nsteps, gamma=gamma)
-    else:
-        runner = Runner(env, model, nsteps=nsteps, gamma=gamma)
+    runner = Runner(env, model, nsteps=nsteps, gamma=gamma)
 
     # Start total timer
     tstart = time.time()
@@ -281,8 +250,6 @@ def learn(
     for update in tqdm(range(1, total_timesteps//nbatch+1)):
         # Get mini batch of experiences
         obs, states, rewards, masks, actions, values, dones, raw_rewards = runner.run()
-        if process is not None:
-            obs = process(obs)
 
         policy_loss, value_loss, policy_entropy = model.train(obs, states, rewards, masks, actions, values)
 
