@@ -210,6 +210,8 @@ def learn(
 
     if hasattr(env, 'vae_name'):
         vae = env.vae_name.split('lat')[0][:-1]
+    else:
+        vae = None
 
     savepath, env_id_lower = log_alg('a2c', env_id, locals(), vae, num_envs=env.num_envs, save=save, lr=lr)
 
