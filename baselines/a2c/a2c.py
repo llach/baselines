@@ -13,9 +13,11 @@ from baselines.common.policies import build_policy
 
 from forkan.common.utils import log_alg
 from forkan.common.csv_logger import CSVLogger
+from forkan.common.tf_utils import vector_summary, scalar_summary
 
 from baselines.a2c.utils import Scheduler, find_trainable_variables
 from baselines.a2c.runner import Runner
+from baselines.common.tf_util import get_session
 
 import datetime
 
@@ -40,7 +42,7 @@ class Model(object):
         save/load():
         - Save load the model
     """
-    def __init__(self, policy, env, nsteps, process=None,
+    def __init__(self, policy, env, nsteps,
             ent_coef=0.01, vf_coef=0.5, max_grad_norm=0.5, lr=7e-4,
             alpha=0.99, epsilon=1e-5, total_timesteps=int(80e6), lrschedule='linear'):
 
@@ -114,21 +116,11 @@ class Model(object):
             )
             return policy_loss, value_loss, policy_entropy
 
-        def step(obs, **extra_feed):
-            return self.step_model.step(process(obs), **extra_feed)
-
-        def value(obs, *args, **kwargs):
-            return self.step_model.value(process(obs), *args, **kwargs)
-
         self.train = train
         self.train_model = train_model
         self.step_model = step_model
-        if process is not None:
-            self.step = step
-            self.value = value
-        else:
-            self.step = self.step_model.step
-            self.value = step_model.value
+        self.step = self.step_model.step
+        self.value = step_model.value
         self.initial_state = step_model.initial_state
         self.save = functools.partial(tf_util.save_variables, sess=sess)
         self.load = functools.partial(tf_util.load_variables, sess=sess)
@@ -155,6 +147,7 @@ def learn(
     env_id=None,
     play=False,
     save=True,
+    tensorboard=False,
     **network_kwargs):
 
     '''
@@ -213,7 +206,7 @@ def learn(
     else:
         vae = None
 
-    savepath, env_id_lower = log_alg('a2c', env_id, locals(), vae, num_envs=env.num_envs, save=save, lr=lr)
+    savepath, env_id_lower = log_alg('a2c-debug', env_id, locals(), vae, num_envs=env.num_envs, save=save, lr=lr)
 
     csv_header = ['timestamp', "nupdates", "total_timesteps", "fps", "policy_entropy", "value_loss",
                   "explained_variance", "mean_reward [{}]".format(reward_average), "nepisodes"]
@@ -249,12 +242,53 @@ def learn(
 
     best_rew = -np.infty
 
-    for update in tqdm(range(1, total_timesteps//nbatch+1)):
+    if tensorboard:
+        print('logging to tensorboard')
+        s = get_session()
+        import os
+        fw = tf.summary.FileWriter('{}/a2c/{}/'.format(os.environ['HOME'], savepath.split('/')[-2]), s.graph)
+
+        ft = None
+        vars = tf.get_collection(tf.GraphKeys.GLOBAL_VARIABLES)
+        for v in vars:
+            if v.name == 'enc-conv-3/kernel:0': ft = v
+
+        def ftv_out():
+            if ft is not None:
+                ftv = np.mean(s.run([ft]), axis=-1)
+                ftv = np.mean(ftv)
+                print(ftv)
+                return ftv
+            else:
+                0
+
+        pl_ph = tf.placeholder(tf.float32, (), name='policy-loss')
+        pe_ph = tf.placeholder(tf.float32, (), name='policy-entropy')
+        vl_ph = tf.placeholder(tf.float32, (), name='value-loss')
+        rew_ph = tf.placeholder(tf.float32, (), name='reward')
+        ac_ph = tf.placeholder(tf.float32, (nbatch, 1), name='actions')
+        ac_clip_ph = tf.placeholder(tf.float32, (nbatch, 1), name='actions')
+
+        weight_ph = tf.placeholder(tf.float32, (), name='encoder-kernel')
+        scalar_summary('encoder-conv-kernel', weight_ph)
+
+        tf.summary.histogram('actions-hist', ac_ph)
+        tf.summary.histogram('actions-hist-clipped', ac_clip_ph)
+
+        scalar_summary('reward', rew_ph)
+
+        scalar_summary('value-loss', vl_ph)
+        scalar_summary('policy-loss', pl_ph)
+        scalar_summary('policy-entropy', pe_ph)
+        vector_summary('actions', ac_ph)
+
+        merged_ = tf.summary.merge_all()
+
+    for update in range(1, total_timesteps//nbatch+1):
         # Get mini batch of experiences
         obs, states, rewards, masks, actions, values, dones, raw_rewards = runner.run()
 
         policy_loss, value_loss, policy_entropy = model.train(obs, states, rewards, masks, actions, values)
-
         for n, (rs, ds) in enumerate(zip(raw_rewards, dones)):
             rs = rs.tolist()
             ds = ds.tolist()
@@ -289,6 +323,19 @@ def learn(
 
         csv.writeline(datetime.datetime.now().isoformat(), update, update*nbatch, fps, float(policy_entropy), float(value_loss), float(ev),
                       float(mrew), nepisodes)
+
+        if tensorboard:
+            summary = s.run(merged_, feed_dict={
+                pl_ph: policy_loss,
+                pe_ph: policy_entropy,
+                vl_ph: value_loss,
+                rew_ph: mrew,
+                ac_ph: actions,
+                ac_clip_ph: np.clip(actions, -2, 2),
+                weight_ph: ftv_out(),
+            })
+
+            fw.add_summary(summary, update)
 
         if update % log_interval == 0 or update == 1:
             logger.record_tabular("nupdates", update)
