@@ -8,7 +8,7 @@ import tensorflow as tf
 from baselines import logger
 
 from baselines.common import set_global_seeds, explained_variance
-from baselines.common import tf_util
+from baselines.common import tf_util, colorize
 from baselines.common.policies import build_policy
 
 from forkan.common.utils import log_alg
@@ -347,6 +347,15 @@ def learn(
             logger.record_tabular("mean_reward [{}]".format(reward_average), float(mrew))
             logger.record_tabular("nepisodes", nepisodes)
             logger.dump_tabular()
+
+            perc = ((update * nbatch) / total_timesteps) * 100
+            steps2go = total_timesteps - (update * nbatch)
+            secs2go = steps2go / fps
+            min2go = secs2go / 60
+
+            hrs = int(min2go // 60)
+            mins = int(min2go) % 60
+            print(colorize('ETA: {}h {}min | done {}% '.format(hrs, mins, int(perc)), color='cyan'))
 
     model.save('{}weights_latest'.format(savepath))
 
