@@ -4,8 +4,11 @@ import numpy as np
 import os.path as osp
 from baselines import logger
 from collections import deque
-from baselines.common import explained_variance, set_global_seeds
+from baselines.common import explained_variance, set_global_seeds, colorize
 from baselines.common.policies import build_policy
+from baselines.common.tf_util import get_session
+from forkan.common.utils import log_alg
+from forkan.common.tf_utils import vector_summary, scalar_summary
 try:
     from mpi4py import MPI
 except ImportError:
@@ -21,7 +24,8 @@ def constfn(val):
 def learn(*, network, env, total_timesteps, eval_env = None, seed=None, nsteps=2048, ent_coef=0.0, lr=3e-4,
             vf_coef=0.5,  max_grad_norm=0.5, gamma=0.99, lam=0.95,
             log_interval=10, nminibatches=4, noptepochs=4, cliprange=0.2,
-            save_interval=0, load_path=None, model_fn=None, env_id=None, play=False, save=True, **network_kwargs):
+            save_interval=0, load_path=None, model_fn=None, env_id=None, play=False, save=True, tensorboard=False,
+            **network_kwargs):
     '''
     Learn policy using PPO algorithm (https://arxiv.org/abs/1707.06347)
 
@@ -121,6 +125,56 @@ def learn(*, network, env, total_timesteps, eval_env = None, seed=None, nsteps=2
     # Start total timer
     tfirststart = time.time()
 
+    if hasattr(env, 'vae_name'):
+        vae = env.vae_name.split('lat')[0][:-1]
+    else:
+        vae = None
+
+    savepath, env_id_lower = log_alg('ppo2-debug', env_id, locals(), vae, num_envs=env.num_envs, save=save, lr=lr)
+
+    if tensorboard:
+        import tensorflow as tf
+        print('logging to tensorboard')
+        s = get_session()
+        import os
+        fw = tf.summary.FileWriter('{}/ppo2/{}/'.format(os.environ['HOME'], savepath.split('/')[-2]), s.graph)
+
+        ft = None
+        vars = tf.get_collection(tf.GraphKeys.GLOBAL_VARIABLES)
+        for v in vars:
+            if v.name == 'enc-conv-3/kernel:0': ft = v
+
+        def ftv_out():
+            if ft is not None:
+                ftv = np.mean(s.run([ft]), axis=-1)
+                ftv = np.mean(ftv)
+                print(ftv)
+                return ftv
+            else:
+                0
+
+        pl_ph = tf.placeholder(tf.float32, (), name='policy-loss')
+        pe_ph = tf.placeholder(tf.float32, (), name='policy-entropy')
+        vl_ph = tf.placeholder(tf.float32, (), name='value-loss')
+        rew_ph = tf.placeholder(tf.float32, (), name='reward')
+        ac_ph = tf.placeholder(tf.float32, (nbatch, 1), name='actions')
+        ac_clip_ph = tf.placeholder(tf.float32, (nbatch, 1), name='actions')
+
+        weight_ph = tf.placeholder(tf.float32, (), name='encoder-kernel')
+        scalar_summary('encoder-conv-kernel', weight_ph)
+
+        tf.summary.histogram('actions-hist', ac_ph)
+        tf.summary.histogram('actions-hist-clipped', ac_clip_ph)
+
+        scalar_summary('reward', rew_ph)
+
+        scalar_summary('value-loss', vl_ph)
+        scalar_summary('policy-loss', pl_ph)
+        scalar_summary('policy-entropy', pe_ph)
+        vector_summary('actions', ac_ph)
+
+        merged_ = tf.summary.merge_all()
+
     nupdates = total_timesteps//nbatch
     for update in range(1, nupdates+1):
         assert nbatch % nminibatches == 0
@@ -177,6 +231,20 @@ def learn(*, network, env, total_timesteps, eval_env = None, seed=None, nsteps=2
         tnow = time.time()
         # Calculate the fps (frame per second)
         fps = int(nbatch / (tnow - tstart))
+
+        if tensorboard:
+            summary = s.run(merged_, feed_dict={
+                pl_ph: lossvals[0],
+                vl_ph: lossvals[1],
+                pe_ph: lossvals[2],
+                rew_ph: safemean([epinfo['r'] for epinfo in epinfobuf]),
+                ac_ph: actions,
+                ac_clip_ph: np.clip(actions, -2, 2),
+                weight_ph: ftv_out(),
+            })
+
+            fw.add_summary(summary, update*nbatch)
+
         if update % log_interval == 0 or update == 1:
             # Calculates if value function is a good predicator of the returns (ev > 1)
             # or if it's just worse than predicting nothing (ev =< 0)
@@ -196,6 +264,16 @@ def learn(*, network, env, total_timesteps, eval_env = None, seed=None, nsteps=2
                 logger.logkv(lossname, lossval)
             if MPI is None or MPI.COMM_WORLD.Get_rank() == 0:
                 logger.dumpkvs()
+
+            perc = ((update * nbatch) / total_timesteps) * 100
+            steps2go = total_timesteps - (update * nbatch)
+            secs2go = steps2go / fps
+            min2go = secs2go / 60
+
+            hrs = int(min2go // 60)
+            mins = int(min2go) % 60
+            print(colorize('ETA: {}h {}min | done {}% '.format(hrs, mins, int(perc)), color='cyan'))
+
         if save_interval and (update % save_interval == 0 or update == 1) and logger.get_dir() and (MPI is None or MPI.COMM_WORLD.Get_rank() == 0):
             checkdir = osp.join(logger.get_dir(), 'checkpoints')
             os.makedirs(checkdir, exist_ok=True)
