@@ -24,7 +24,7 @@ def constfn(val):
 def learn(*, network, env, total_timesteps, eval_env = None, seed=None, nsteps=2048, ent_coef=0.0, lr=3e-4,
             vf_coef=0.5,  max_grad_norm=0.5, gamma=0.99, lam=0.95,
             log_interval=10, nminibatches=4, noptepochs=4, cliprange=0.2,
-            save_interval=0, load_path=None, model_fn=None, env_id=None, play=False, save=True, tensorboard=False,
+            save_interval=0, load_path=None, model_fn=None, env_id=None, play=False, save=True, tensorboard=False, k=None,
             **network_kwargs):
     '''
     Learn policy using PPO algorithm (https://arxiv.org/abs/1707.06347)
@@ -130,7 +130,7 @@ def learn(*, network, env, total_timesteps, eval_env = None, seed=None, nsteps=2
     else:
         vae = None
 
-    savepath, env_id_lower = log_alg('ppo2-debug', env_id, locals(), vae, num_envs=env.num_envs, save=save, lr=lr)
+    savepath, env_id_lower = log_alg('ppo2-debug', env_id, locals(), vae, num_envs=env.num_envs, save=save, lr=lr, k=k)
 
     if tensorboard:
         import tensorflow as tf
