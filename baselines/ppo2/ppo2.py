@@ -130,8 +130,9 @@ def learn(*, network, env, total_timesteps, eval_env = None, seed=None, nsteps=2
     else:
         vae = None
 
-    savepath, env_id_lower = log_alg('ppo2-debug', env_id, locals(), vae, num_envs=env.num_envs, save=save, lr=lr, k=k)
-
+    savepath, env_id_lower = log_alg('ppo2', env_id, locals(), vae, num_envs=env.num_envs, save=save, lr=lr, k=k)
+    buf = []
+    t = 0
     if tensorboard:
         import tensorflow as tf
         print('logging to tensorboard')
@@ -139,29 +140,12 @@ def learn(*, network, env, total_timesteps, eval_env = None, seed=None, nsteps=2
         import os
         fw = tf.summary.FileWriter('{}/ppo2/{}/'.format(os.environ['HOME'], savepath.split('/')[-2]), s.graph)
 
-        ft = None
-        vars = tf.get_collection(tf.GraphKeys.GLOBAL_VARIABLES)
-        for v in vars:
-            if v.name == 'enc-conv-3/kernel:0': ft = v
-
-        def ftv_out():
-            if ft is not None:
-                ftv = np.mean(s.run([ft]), axis=-1)
-                ftv = np.mean(ftv)
-                print(ftv)
-                return ftv
-            else:
-                0
-
         pl_ph = tf.placeholder(tf.float32, (), name='policy-loss')
         pe_ph = tf.placeholder(tf.float32, (), name='policy-entropy')
         vl_ph = tf.placeholder(tf.float32, (), name='value-loss')
         rew_ph = tf.placeholder(tf.float32, (), name='reward')
         ac_ph = tf.placeholder(tf.float32, (nbatch, 1), name='actions')
         ac_clip_ph = tf.placeholder(tf.float32, (nbatch, 1), name='actions')
-
-        weight_ph = tf.placeholder(tf.float32, (), name='encoder-kernel')
-        scalar_summary('encoder-conv-kernel', weight_ph)
 
         tf.summary.histogram('actions-hist', ac_ph)
         tf.summary.histogram('actions-hist-clipped', ac_clip_ph)
@@ -190,6 +174,19 @@ def learn(*, network, env, total_timesteps, eval_env = None, seed=None, nsteps=2
         if eval_env is not None:
             eval_obs, eval_returns, eval_masks, eval_actions, eval_values, eval_neglogpacs, eval_states, eval_epinfos = eval_runner.run() #pylint: disable=E0632
 
+
+        """ This is for observation debugging. Uncomment with caution. """
+        # import matplotlib.pyplot as plt
+        # print(obs.shape)
+        # for i in range(nsteps):
+        #     buf.append(obs[i])
+        #
+        # for idx in range(obs.shape[-1]):
+        #     plt.plot(np.asarray(buf)[:, idx])
+        # plt.show()
+        # if t == 50: exit(0)
+        # t += 1
+        
         epinfobuf.extend(epinfos)
         if eval_env is not None:
             eval_epinfobuf.extend(eval_epinfos)
@@ -240,7 +237,6 @@ def learn(*, network, env, total_timesteps, eval_env = None, seed=None, nsteps=2
                 rew_ph: safemean([epinfo['r'] for epinfo in epinfobuf]),
                 ac_ph: actions,
                 ac_clip_ph: np.clip(actions, -2, 2),
-                weight_ph: ftv_out(),
             })
 
             fw.add_summary(summary, update*nbatch)
