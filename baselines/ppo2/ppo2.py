@@ -1,5 +1,6 @@
 import os
 import time
+import datetime
 import numpy as np
 import os.path as osp
 from baselines import logger
@@ -9,6 +10,8 @@ from baselines.common.policies import build_policy
 from baselines.common.tf_util import get_session
 from forkan.common.utils import log_alg
 from forkan.common.tf_utils import vector_summary, scalar_summary
+from forkan.common.csv_logger import CSVLogger
+
 try:
     from mpi4py import MPI
 except ImportError:
@@ -131,6 +134,11 @@ def learn(*, network, env, total_timesteps, eval_env = None, seed=None, nsteps=2
         vae = None
 
     savepath, env_id_lower = log_alg('ppo2', env_id, locals(), vae, num_envs=env.num_envs, save=save, lr=lr, k=k)
+
+    csv_header = ['timestamp', "nupdates", "total_timesteps", "fps", "policy_entropy", "value_loss", "policy_loss",
+                  "explained_variance", "mean_reward"]
+    csv = CSVLogger('{}progress.csv'.format(savepath), *csv_header)
+
     buf = []
     t = 0
     if tensorboard:
@@ -229,6 +237,10 @@ def learn(*, network, env, total_timesteps, eval_env = None, seed=None, nsteps=2
         # Calculate the fps (frame per second)
         fps = int(nbatch / (tnow - tstart))
 
+        # Calculates if value function is a good predicator of the returns (ev > 1)
+        # or if it's just worse than predicting nothing (ev =< 0)
+        ev = explained_variance(values, returns)
+
         if tensorboard:
             summary = s.run(merged_, feed_dict={
                 pl_ph: lossvals[0],
@@ -241,10 +253,10 @@ def learn(*, network, env, total_timesteps, eval_env = None, seed=None, nsteps=2
 
             fw.add_summary(summary, update*nbatch)
 
+        csv.writeline(datetime.datetime.now().isoformat(), update, update * nbatch, fps, float(lossvals[2]),
+                      float(lossvals[1]), float(lossvals[0]), float(ev), float(safemean([epinfo['r'] for epinfo in epinfobuf])))
+
         if update % log_interval == 0 or update == 1:
-            # Calculates if value function is a good predicator of the returns (ev > 1)
-            # or if it's just worse than predicting nothing (ev =< 0)
-            ev = explained_variance(values, returns)
             logger.logkv("serial_timesteps", update*nsteps)
             logger.logkv("nupdates", update)
             logger.logkv("total_timesteps", update*nbatch)

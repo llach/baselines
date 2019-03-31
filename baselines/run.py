@@ -15,7 +15,6 @@ from importlib import import_module
 
 from baselines.common.vec_env.vec_normalize import VecNormalize
 
-from forkan.rl import FakeLazyVAE, PendulumRenderEnv, PendulumRenderVAEEnv
 
 try:
     from mpi4py import MPI
