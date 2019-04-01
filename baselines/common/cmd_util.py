@@ -105,8 +105,6 @@ def make_env(env_id, env_type, subrank=0, seed=None, reward_scale=1.0, gamestate
 
     if env_type == 'atari':
         env = wrap_deepmind(env, **wrapper_kwargs)
-        if vae:
-            env = LazyVAE(env, load_from=env_id.replace('NoFrameskip', '').lower().split('-')[0])
     elif env_type == 'retro':
         env = retro_wrappers.wrap_deepmind_retro(env, **wrapper_kwargs)
 
