@@ -240,11 +240,13 @@ def learn(*, network, env, total_timesteps, eval_env = None, seed=None, nsteps=2
                     mbflatinds = flatinds[mbenvinds].ravel()
                     slices = (arr[mbflatinds] for arr in (obs, returns, masks, actions, values, neglogpacs))
                     mbstates = states[mbenvinds]
-                    mblossvals.append(model.train(lrnow, cliprangenow, *slices, mbstates))
+                    res = model.train(lrnow, cliprangenow, *slices)
+                    lvs, X_grad_mb = res[:-1], res[-1]
+                    mblossvals.append(lvs)
 
         # TODO sum or mean?
-        X_grads = np.asarray(X_grads, dtype=np.float32).sum(axis=0)
-        env.apply_gradients_to_vae(X_grads)
+        # X_grads = np.asarray(X_grads, dtype=np.float32).sum(axis=0)
+        # env.apply_gradients_to_vae(X_grads)
 
         # Feedforward --> get losses --> update
         lossvals = np.mean(mblossvals, axis=0)
