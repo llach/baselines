@@ -181,18 +181,20 @@ def learn(*, network, env, total_timesteps, eval_env = None, seed=None, nsteps=2
         if eval_env is not None:
             eval_obs, eval_returns, eval_masks, eval_actions, eval_values, eval_neglogpacs, eval_states, eval_epinfos = eval_runner.run() #pylint: disable=E0632
 
+        print(f'obs array shape after reshaping and swappign {obs.shape}')
+
 
         """ This is for observation debugging. Uncomment with caution. """
-        # import matplotlib.pyplot as plt
-        # print(obs.shape)
-        # for i in range(nsteps):
-        #     buf.append(obs[i])
-        #
-        # for idx in range(obs.shape[-1]):
-        #     plt.plot(np.asarray(buf)[:, idx])
+        import matplotlib.pyplot as plt
+        print(obs.shape)
+        for i in range(nsteps):
+            buf.append(obs[i])
+
+        for idx in range(obs.shape[-1]):
+            plt.plot(np.asarray(buf)[:, idx])
         # plt.show()
-        # if t == 50: exit(0)
-        # t += 1
+        if t == 50: exit(0)
+        t += 1
         
         epinfobuf.extend(epinfos)
         if eval_env is not None:
@@ -200,6 +202,7 @@ def learn(*, network, env, total_timesteps, eval_env = None, seed=None, nsteps=2
 
         # Here what we're going to do is for each minibatch calculate the loss and append it.
         mblossvals = []
+        X_grads = []
         if states is None: # nonrecurrent version
             # Index of each element of batch_size
             # Create the indices array
@@ -207,12 +210,22 @@ def learn(*, network, env, total_timesteps, eval_env = None, seed=None, nsteps=2
             for _ in range(noptepochs):
                 # Randomize the indexes
                 np.random.shuffle(inds)
+                X_grad_opt = []
                 # 0 to batch_size with batch_train_size step
                 for start in range(0, nbatch, nbatch_train):
                     end = start + nbatch_train
                     mbinds = inds[start:end]
                     slices = (arr[mbinds] for arr in (obs, returns, masks, actions, values, neglogpacs))
-                    mblossvals.append(model.train(lrnow, cliprangenow, *slices))
+                    res = model.train(lrnow, cliprangenow, *slices)
+                    lvs, X_grad_mb = res[:-1], res[-1]
+                    mblossvals.append(lvs)
+                    X_grad_opt.append(np.squeeze(X_grad_mb))
+
+                # first dim holds the minibatches. reshape to get shuffled array of gradients wrt X
+                X_grad_opt = np.asarray(X_grad_opt, dtype=np.float32).reshape((nbatch, -1))
+
+                # reorder gradients so that they match sample order and append to grad array
+                X_grads.append(X_grad_opt[np.argsort(inds)])
         else: # recurrent version
             assert nenvs % nminibatches == 0
             envsperbatch = nenvs // nminibatches
@@ -228,6 +241,10 @@ def learn(*, network, env, total_timesteps, eval_env = None, seed=None, nsteps=2
                     slices = (arr[mbflatinds] for arr in (obs, returns, masks, actions, values, neglogpacs))
                     mbstates = states[mbenvinds]
                     mblossvals.append(model.train(lrnow, cliprangenow, *slices, mbstates))
+
+        # TODO sum or mean?
+        X_grads = np.asarray(X_grads, dtype=np.float32).sum(axis=0)
+        env.apply_gradients_to_vae(X_grads)
 
         # Feedforward --> get losses --> update
         lossvals = np.mean(mblossvals, axis=0)

@@ -112,7 +112,7 @@ class Model(object):
         self.loss_names = ['policy_loss', 'value_loss', 'policy_entropy', 'approxkl', 'clipfrac']
         self.stats_list = [pg_loss, vf_loss, entropy, approxkl, clipfrac]
 
-
+        self.X_grad = tf.gradients(loss, train_model.X)
         self.train_model = train_model
         self.act_model = act_model
         self.step = act_model.step
@@ -150,7 +150,7 @@ class Model(object):
             td_map[self.train_model.M] = masks
 
         return self.sess.run(
-            self.stats_list + [self._train_op],
+            self.stats_list + [self.X_grad, self._train_op],
             td_map
         )[:-1]
 
