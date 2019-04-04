@@ -123,8 +123,7 @@ def build_policy(env, policy_network, value_network=None,  normalize_observation
         network_type = policy_network
         policy_network = get_network_builder(network_type)(**policy_kwargs)
 
-    def policy_fn(nbatch=None, nsteps=None, sess=None, observ_placeholder=None):
-        ob_space = env.observation_space
+    def policy_fn(nbatch=None, nsteps=None, sess=None, ob_space=env.observation_space, observ_placeholder=None):
 
         X = observ_placeholder if observ_placeholder is not None else observation_placeholder(ob_space, batch_size=nbatch)
 
