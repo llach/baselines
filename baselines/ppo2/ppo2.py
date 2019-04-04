@@ -25,7 +25,7 @@ def constfn(val):
 
 def learn(*, network, env, total_timesteps, eval_env = None, seed=None, nsteps=2048, ent_coef=0.0, lr=3e-4,
             vf_coef=0.5,  max_grad_norm=0.5, gamma=0.99, lam=0.95,
-            log_interval=10, nminibatches=4, noptepochs=4, cliprange=0.2,
+            log_interval=10, nminibatches=4, noptepochs=4, cliprange=0.2, vae_model=None,
             save_interval=0, load_path=None, model_fn=None, env_id=None, play=False, save=True, tensorboard=False, k=None,
             **network_kwargs):
     '''
@@ -105,9 +105,15 @@ def learn(*, network, env, total_timesteps, eval_env = None, seed=None, nsteps=2
     nbatch_train = nbatch // nminibatches
 
     # Instantiate the model object (that creates act_model and train_model)
-    if model_fn is None:
+    if vae_model is None:
         from baselines.ppo2.model import Model
         model_fn = Model
+    else:
+        from baselines.ppo2.vae_model import VAEModel
+        def _model(**kwargs):
+            return VAEModel(vae_name=vae_model, **kwargs)
+        model_fn = _model()
+
 
     model = model_fn(policy=policy, ob_space=ob_space, ac_space=ac_space, nbatch_act=nenvs, nbatch_train=nbatch_train,
                     nsteps=nsteps, ent_coef=ent_coef, vf_coef=vf_coef,
