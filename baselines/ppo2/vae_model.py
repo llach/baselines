@@ -1,6 +1,8 @@
 import tensorflow as tf
 import functools
 
+from gym.spaces import Box
+
 from baselines.common.tf_util import get_session, save_variables, load_variables
 from baselines.common.tf_util import initialize
 
@@ -10,6 +12,10 @@ try:
     from baselines.common.mpi_util import sync_from_root
 except ImportError:
     MPI = None
+
+import numpy as np
+from forkan.models import VAE
+
 
 class VAEModel(object):
     """
@@ -24,23 +30,28 @@ class VAEModel(object):
     save/load():
     - Save load the model
     """
-    def __init__(self, *, vae_name, policy, ob_space, ac_space, nbatch_act, nbatch_train,
+    def __init__(self, vae_name, k, policy, ob_space, ac_space, nbatch_act, nbatch_train,
                 nsteps, ent_coef, vf_coef, max_grad_norm, microbatch_size=None):
         self.sess = sess = get_session()
 
-        print(f'building on model {vae_name}')
-        exit(0)
+        v = VAE(load_from=vae_name, network='pendulum')
+
+        vae_x = tf.placeholder(tf.float32, shape=(None, k,)+v.input_shape[1:], name='stacked-vae-input')
+        disent_x = [vae_x[:, i, ...] for i in range(k)]
+        obs_tensor = tf.concat(v.stack_encoder(disent_x), axis=1)
+
+        model_ob_space = Box(low=-2, high=2, shape=(k*v.latent_dim, ), dtype=np.float32)
 
         with tf.variable_scope('ppo2_model', reuse=tf.AUTO_REUSE):
             # CREATE OUR TWO MODELS
             # act_model that is used for sampling
-            act_model = policy(nbatch_act, 1, sess)
+            act_model = policy(nbatch_act, 1, sess, ob_space=model_ob_space, observ_placeholder=obs_tensor)
 
             # Train model for training
             if microbatch_size is None:
-                train_model = policy(nbatch_train, nsteps, sess)
+                train_model = policy(nbatch_train, nsteps, sess, ob_space=model_ob_space, observ_placeholder=obs_tensor)
             else:
-                train_model = policy(microbatch_size, nsteps, sess)
+                train_model = policy(microbatch_size, nsteps, sess, ob_space=model_ob_space, observ_placeholder=obs_tensor)
 
         # CREATE THE PLACEHOLDERS
         self.A = A = train_model.pdtype.sample_placeholder([None])

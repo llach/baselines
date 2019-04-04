@@ -107,17 +107,14 @@ def learn(*, network, env, total_timesteps, eval_env = None, seed=None, nsteps=2
     # Instantiate the model object (that creates act_model and train_model)
     if vae_model is None:
         from baselines.ppo2.model import Model
-        model_fn = Model
+        model = Model(policy=policy, ob_space=ob_space, ac_space=ac_space, nbatch_act=nenvs, nbatch_train=nbatch_train,
+                      nsteps=nsteps, ent_coef=ent_coef, vf_coef=vf_coef,
+                      max_grad_norm=max_grad_norm)
     else:
         from baselines.ppo2.vae_model import VAEModel
-        def _model(**kwargs):
-            return VAEModel(vae_name=vae_model, **kwargs)
-        model_fn = _model()
-
-
-    model = model_fn(policy=policy, ob_space=ob_space, ac_space=ac_space, nbatch_act=nenvs, nbatch_train=nbatch_train,
-                    nsteps=nsteps, ent_coef=ent_coef, vf_coef=vf_coef,
-                    max_grad_norm=max_grad_norm)
+        model = VAEModel(vae_name=vae_model, k=k, policy=policy, ob_space=ob_space, ac_space=ac_space, nbatch_act=nenvs, nbatch_train=nbatch_train,
+                         nsteps=nsteps, ent_coef=ent_coef, vf_coef=vf_coef,
+                         max_grad_norm=max_grad_norm)
 
     if load_path is not None:
         model.load(load_path)
@@ -138,7 +135,8 @@ def learn(*, network, env, total_timesteps, eval_env = None, seed=None, nsteps=2
     else:
         vae = None
 
-    savepath, env_id_lower = log_alg('ppo2', env_id, locals(), vae, num_envs=env.num_envs, save=save, lr=lr, k=k, seed=seed)
+    savepath, env_id_lower = log_alg('ppo2', env_id, locals(), vae, num_envs=env.num_envs, save=save, lr=lr, k=k,
+                                     seed=seed, model=vae_model or 'default')
 
     csv_header = ['timestamp', "nupdates", "total_timesteps", "fps", "policy_entropy", "value_loss", "policy_loss",
                   "explained_variance", "mean_reward"]
