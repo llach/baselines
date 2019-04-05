@@ -2,7 +2,7 @@ import tensorflow as tf
 import functools
 
 from gym.spaces import Box
-
+import matplotlib.pyplot as plt
 from baselines.common.tf_util import get_session, save_variables, load_variables
 from baselines.common.tf_util import initialize
 
@@ -34,7 +34,8 @@ class VAEModel(object):
                 nsteps, ent_coef, vf_coef, max_grad_norm, microbatch_size=None):
         self.sess = sess = get_session()
 
-        self.v = VAE(load_from=vae_name, network='pendulum', with_opt=False)
+        # it's important to pass the session we are using in ppo
+        self.v = VAE(load_from=vae_name, network='pendulum', with_opt=False, session=self.sess)
 
         self.vae_x = tf.placeholder(tf.float32, shape=(None, k,)+self.v.input_shape[1:], name='stacked-vae-input')
         disent_x = [self.vae_x[:, i, ...] for i in range(k)]
@@ -42,6 +43,7 @@ class VAEModel(object):
 
         model_ob_space = Box(low=-2, high=2, shape=(k*self.v.latent_dim, ), dtype=np.float32)
         self.t = 0
+        self.k = k
 
         with tf.variable_scope('ppo2_model', reuse=tf.AUTO_REUSE):
             # CREATE OUR TWO MODELS
@@ -139,6 +141,9 @@ class VAEModel(object):
         if MPI is not None:
             sync_from_root(sess, global_variables) #pylint: disable=E1101
 
+        # we have to load variables again after running the initializer
+        self.v._load()
+
     def value(self, obs, **extra_feed):
         obs = np.expand_dims(np.moveaxis(obs, -1, 1), -1)
         feed_dict = {self.vae_x: obs}
@@ -201,4 +206,32 @@ class VAEModel(object):
             self.stats_list + [self._train_op],
             td_map
         )[:-1]
+
+        """ This again is for debugging. """
+        # res = self.sess.run(
+        #     self.stats_list + [self.obs_tensor, self._train_op],
+        #     td_map
+        # )[:-1]
+        #
+        # mus = res[-1]
+        # print('here ', mus.shape, obs.shape)
+        #
+        #
+        # for i in range(10):
+        #
+        #     fig, axes = plt.subplots(2, 3, figsize=(12, 10))
+        #
+        #     for j in range(self.k):
+        #         axes[0, j].imshow(np.squeeze(obs[i, j, ...]))
+        #         axes[0, j].set_title(f'k={j}')
+        #
+        #         axes[1, j].bar(np.arange(5), mus[i][self.v.latent_dim*j:self.v.latent_dim*(j+1)])
+        #         axes[1, j].set_title(f'k={j}')
+        #
+        #     fig.tight_layout()
+        #     fig.subplots_adjust(hspace=0.88)
+        #
+        #     plt.show()
+        # exit()
+        # return res[:-1]
 
