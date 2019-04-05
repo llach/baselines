@@ -110,18 +110,25 @@ def learn(*, network, env, total_timesteps, eval_env = None, seed=None, nsteps=2
         model = Model(policy=policy, ob_space=ob_space, ac_space=ac_space, nbatch_act=nenvs, nbatch_train=nbatch_train,
                       nsteps=nsteps, ent_coef=ent_coef, vf_coef=vf_coef,
                       max_grad_norm=max_grad_norm)
+        if load_path is not None:
+            model.load(load_path)
+        # Instantiate the runner object
+        runner = Runner(env=env, model=model, nsteps=nsteps, gamma=gamma, lam=lam)
+        if eval_env is not None:
+            eval_runner = Runner(env = eval_env, model = model, nsteps = nsteps, gamma = gamma, lam= lam)
     else:
         from baselines.ppo2.vae_model import VAEModel
+        from baselines.ppo2.vae_runner import VAERunner
         model = VAEModel(vae_name=vae_model, k=k, policy=policy, ob_space=ob_space, ac_space=ac_space, nbatch_act=nenvs, nbatch_train=nbatch_train,
                          nsteps=nsteps, ent_coef=ent_coef, vf_coef=vf_coef,
                          max_grad_norm=max_grad_norm)
+        if load_path is not None:
+            model.load(load_path)
+        # Instantiate the runner object
+        runner = VAERunner(env=env, model=model, nsteps=nsteps, gamma=gamma, lam=lam)
 
-    if load_path is not None:
-        model.load(load_path)
-    # Instantiate the runner object
-    runner = Runner(env=env, model=model, nsteps=nsteps, gamma=gamma, lam=lam)
-    if eval_env is not None:
-        eval_runner = Runner(env = eval_env, model = model, nsteps = nsteps, gamma = gamma, lam= lam)
+        if eval_env is not None:
+            eval_runner = VAERunner(env = eval_env, model = model, nsteps = nsteps, gamma = gamma, lam= lam)
 
     epinfobuf = deque(maxlen=100)
     if eval_env is not None:
@@ -184,7 +191,7 @@ def learn(*, network, env, total_timesteps, eval_env = None, seed=None, nsteps=2
         obs, returns, masks, actions, values, neglogpacs, states, epinfos = runner.run() #pylint: disable=E0632
         if eval_env is not None:
             eval_obs, eval_returns, eval_masks, eval_actions, eval_values, eval_neglogpacs, eval_states, eval_epinfos = eval_runner.run() #pylint: disable=E0632
-
+        print(states)
 
         """ This is for observation debugging. Uncomment with caution. """
         # import matplotlib.pyplot as plt
@@ -204,7 +211,7 @@ def learn(*, network, env, total_timesteps, eval_env = None, seed=None, nsteps=2
 
         # Here what we're going to do is for each minibatch calculate the loss and append it.
         mblossvals = []
-        if states is None: # nonrecurrent version
+        if states is None or states == []: # nonrecurrent version
             # Index of each element of batch_size
             # Create the indices array
             inds = np.arange(nbatch)
@@ -286,11 +293,8 @@ def learn(*, network, env, total_timesteps, eval_env = None, seed=None, nsteps=2
             print(colorize('ETA: {}h {}min | done {}% '.format(hrs, mins, int(perc)), color='cyan'))
 
         if save_interval and (update % save_interval == 0 or update == 1) and logger.get_dir() and (MPI is None or MPI.COMM_WORLD.Get_rank() == 0):
-            checkdir = osp.join(logger.get_dir(), 'checkpoints')
-            os.makedirs(checkdir, exist_ok=True)
-            savepath = osp.join(checkdir, '%.5i'%update)
-            print('Saving to', savepath)
             model.save(savepath)
+
     return model
 # Avoid division error when calculate the mean (in our case if epinfo is empty returns np.nan, not return an error)
 def safemean(xs):

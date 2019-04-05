@@ -34,24 +34,25 @@ class VAEModel(object):
                 nsteps, ent_coef, vf_coef, max_grad_norm, microbatch_size=None):
         self.sess = sess = get_session()
 
-        v = VAE(load_from=vae_name, network='pendulum')
+        self.v = VAE(load_from=vae_name, network='pendulum', with_opt=False)
 
-        vae_x = tf.placeholder(tf.float32, shape=(None, k,)+v.input_shape[1:], name='stacked-vae-input')
-        disent_x = [vae_x[:, i, ...] for i in range(k)]
-        obs_tensor = tf.concat(v.stack_encoder(disent_x), axis=1)
+        self.vae_x = tf.placeholder(tf.float32, shape=(None, k,)+self.v.input_shape[1:], name='stacked-vae-input')
+        disent_x = [self.vae_x[:, i, ...] for i in range(k)]
+        self.obs_tensor = tf.concat(self.v.stack_encoder(disent_x), axis=1)
 
-        model_ob_space = Box(low=-2, high=2, shape=(k*v.latent_dim, ), dtype=np.float32)
+        model_ob_space = Box(low=-2, high=2, shape=(k*self.v.latent_dim, ), dtype=np.float32)
+        self.t = 0
 
         with tf.variable_scope('ppo2_model', reuse=tf.AUTO_REUSE):
             # CREATE OUR TWO MODELS
             # act_model that is used for sampling
-            act_model = policy(nbatch_act, 1, sess, ob_space=model_ob_space, observ_placeholder=obs_tensor)
+            act_model = policy(nbatch_act, 1, sess, ob_space=model_ob_space, observ_placeholder=self.obs_tensor)
 
             # Train model for training
             if microbatch_size is None:
-                train_model = policy(nbatch_train, nsteps, sess, ob_space=model_ob_space, observ_placeholder=obs_tensor)
+                train_model = policy(nbatch_train, nsteps, sess, ob_space=model_ob_space, observ_placeholder=self.obs_tensor)
             else:
-                train_model = policy(microbatch_size, nsteps, sess, ob_space=model_ob_space, observ_placeholder=obs_tensor)
+                train_model = policy(microbatch_size, nsteps, sess, ob_space=model_ob_space, observ_placeholder=self.obs_tensor)
 
         # CREATE THE PLACEHOLDERS
         self.A = A = train_model.pdtype.sample_placeholder([None])
@@ -103,7 +104,7 @@ class VAEModel(object):
 
         # UPDATE THE PARAMETERS USING LOSS
         # 1. Get the model parameters
-        params = tf.trainable_variables('ppo2_model')
+        params = tf.trainable_variables('ppo2_model') + tf.trainable_variables('vae/encoder')
         # 2. Build our trainer
         if MPI is not None:
             self.trainer = MpiAdamOptimizer(MPI.COMM_WORLD, learning_rate=LR, epsilon=1e-5)
@@ -126,22 +127,55 @@ class VAEModel(object):
         self.loss_names = ['policy_loss', 'value_loss', 'policy_entropy', 'approxkl', 'clipfrac']
         self.stats_list = [pg_loss, vf_loss, entropy, approxkl, clipfrac]
 
-        self.X_grad = tf.gradients(loss, train_model.X)
         self.train_model = train_model
         self.act_model = act_model
-        self.step = act_model.step
-        self.value = act_model.value
-        self.initial_state = act_model.initial_state
 
-        self.save = functools.partial(save_variables, sess=sess)
-        self.load = functools.partial(load_variables, sess=sess)
+
+        self.initial_state = act_model.initial_state
+        self.sess = sess
 
         initialize()
         global_variables = tf.get_collection(tf.GraphKeys.GLOBAL_VARIABLES, scope="")
         if MPI is not None:
             sync_from_root(sess, global_variables) #pylint: disable=E1101
 
+    def value(self, obs, **extra_feed):
+        obs = np.expand_dims(np.moveaxis(obs, -1, 1), -1)
+        feed_dict = {self.vae_x: obs}
+        am = self.act_model
+
+        for inpt_name, data in extra_feed.items():
+            if inpt_name in am.__dict__.keys():
+                inpt = am.__dict__[inpt_name]
+                if isinstance(inpt, tf.Tensor) and inpt._op.type == 'Placeholder':
+                    feed_dict[inpt] = am.adjust_shape(inpt, data)
+
+        return np.asarray(am.sess.run([am.vf], feed_dict=feed_dict), dtype=np.float32)
+
+    def step(self, obs, **extra_feed):
+        obs = np.expand_dims(np.moveaxis(obs, -1, 1), -1)
+        feed_dict = {self.vae_x: obs}
+        am = self.act_model
+
+        for inpt_name, data in extra_feed.items():
+            if inpt_name in am.__dict__.keys():
+                inpt = am.__dict__[inpt_name]
+                if isinstance(inpt, tf.Tensor) and inpt._op.type == 'Placeholder':
+                    feed_dict[inpt] = am.adjust_shape(inpt, data)
+
+        return am.sess.run([am.action, am.vf, am.state, am.neglogp], feed_dict=feed_dict)
+
+    def save(self, savepath):
+        save_variables(savepath, tf.trainable_variables('ppo2_model'), sess=self.sess)
+        self.v._save('retrain')
+
+    def load(self, loadpath):
+        save_variables(loadpath, tf.trainable_variables('ppo2_model'), sess=self.sess)
+        self.v._load('retrain')
+
     def train(self, lr, cliprange, obs, returns, masks, actions, values, neglogpacs, states=None):
+        obs = np.expand_dims(np.moveaxis(obs, -1, 1), -1)
+
         # Here we calculate advantage A(s,a) = R + yV(s') - V(s)
         # Returns = R + yV(s')
         advs = returns - values
@@ -150,21 +184,21 @@ class VAEModel(object):
         advs = (advs - advs.mean()) / (advs.std() + 1e-8)
 
         td_map = {
-            self.train_model.X : obs,
-            self.A : actions,
-            self.ADV : advs,
-            self.R : returns,
-            self.LR : lr,
-            self.CLIPRANGE : cliprange,
-            self.OLDNEGLOGPAC : neglogpacs,
-            self.OLDVPRED : values
+            self.vae_x: obs,
+            self.A: actions,
+            self.ADV: advs,
+            self.R: returns,
+            self.LR: lr,
+            self.CLIPRANGE: cliprange,
+            self.OLDNEGLOGPAC: neglogpacs,
+            self.OLDVPRED: values
         }
         if states is not None:
             td_map[self.train_model.S] = states
             td_map[self.train_model.M] = masks
 
         return self.sess.run(
-            self.stats_list + [self.X_grad, self._train_op],
+            self.stats_list + [self._train_op],
             td_map
         )[:-1]
 
