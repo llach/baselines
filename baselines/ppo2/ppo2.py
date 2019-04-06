@@ -27,7 +27,7 @@ def constfn(val):
 def learn(*, network, env, total_timesteps, eval_env = None, seed=None, nsteps=2048, ent_coef=0.0, lr=3e-4,
           vf_coef=0.5, max_grad_norm=0.5, gamma=0.99, lam=0.95,
           log_interval=10, nminibatches=4, noptepochs=4, cliprange=0.2, vae_params=None,
-          save_interval=0, load_path=None, model_fn=None, env_id=None, play=False, save=True, tensorboard=False, k=None,
+          save_interval=50, load_path=None, model_fn=None, env_id=None, play=False, save=True, tensorboard=False, k=None,
           **network_kwargs):
     '''
     Learn policy using PPO algorithm (https://arxiv.org/abs/1707.06347)
@@ -186,9 +186,9 @@ def learn(*, network, env, total_timesteps, eval_env = None, seed=None, nsteps=2
 
         scalar_summary('reward', rew_ph)
 
-        scalar_summary('value-loss', vl_ph)
-        scalar_summary('policy-loss', pl_ph)
-        scalar_summary('policy-entropy', pe_ph)
+        scalar_summary('value-loss', vl_ph, scope='rl-loss')
+        scalar_summary('policy-loss', pl_ph, scope='rl-loss')
+        scalar_summary('policy-entropy', pe_ph, scope='rl-loss')
         vector_summary('actions', ac_ph)
 
         if with_vae:
@@ -196,10 +196,10 @@ def learn(*, network, env, total_timesteps, eval_env = None, seed=None, nsteps=2
             kll_ph = tf.placeholder(tf.float32, (), name='rec-loss')
             klls_ph = [tf.placeholder(tf.float32, (), name=f'z{i}-kl') for i in range(model.vae.latent_dim)]
 
-            scalar_summary('reconstruction-loss', rel_ph)
-            scalar_summary('kl-loss', kll_ph)
+            scalar_summary('reconstruction-loss', rel_ph, scope='vae-loss')
+            scalar_summary('kl-loss', kll_ph, scope='vae-loss')
             for i in range(model.vae.latent_dim):
-                scalar_summary(f'z{i}-kl', klls_ph[i])
+                scalar_summary(f'z{i}-kl', klls_ph[i], scope='z-kl')
 
         merged_ = tf.summary.merge_all()
 
@@ -358,9 +358,10 @@ def learn(*, network, env, total_timesteps, eval_env = None, seed=None, nsteps=2
             mins = int(min2go) % 60
             print(colorize('ETA: {}h {}min | done {}% '.format(hrs, mins, int(perc)), color='cyan'))
 
-        if save_interval and (update % save_interval == 0 or update == 1) and logger.get_dir() and (MPI is None or MPI.COMM_WORLD.Get_rank() == 0):
+        if update % save_interval == 0:
             model.save(savepath)
 
+    model.save(savepath)
     return model
 # Avoid division error when calculate the mean (in our case if epinfo is empty returns np.nan, not return an error)
 def safemean(xs):
