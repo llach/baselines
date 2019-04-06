@@ -1,20 +1,19 @@
-import sys
 import multiprocessing
 import os.path as osp
-import gym
+import sys
 from collections import defaultdict
-import tensorflow as tf
-import numpy as np
-
-from baselines.common.vec_env.vec_video_recorder import VecVideoRecorder
-from baselines.common.vec_env.vec_frame_stack import VecFrameStack
-from baselines.common.cmd_util import common_arg_parser, parse_unknown_args, make_vec_env, make_env
-from baselines.common.tf_util import get_session
-from baselines import logger
 from importlib import import_module
 
-from baselines.common.vec_env.vec_normalize import VecNormalize
+import numpy as np
+import tensorflow as tf
 
+import gym
+from baselines import logger
+from baselines.common.cmd_util import common_arg_parser, parse_unknown_args, make_vec_env, make_env
+from baselines.common.tf_util import get_session
+from baselines.common.vec_env.vec_frame_stack import VecFrameStack
+from baselines.common.vec_env.vec_normalize import VecNormalize
+from baselines.common.vec_env.vec_video_recorder import VecVideoRecorder
 
 try:
     from mpi4py import MPI
@@ -52,7 +51,7 @@ _game_envs['retro'] = {
 }
 
 
-def train(args, extra_args, build_env_fn):
+def train(args, extra_args, build_env_fn, vae_params=None):
     env_type, env_id = get_env_type(args.env)
     print('env_type: {}'.format(env_type))
 
@@ -82,6 +81,7 @@ def train(args, extra_args, build_env_fn):
         seed=seed,
         total_timesteps=total_timesteps,
         env_id=env_id,
+        vae_params=vae_params,
         play=args.play,
         **alg_kwargs
     )
@@ -191,7 +191,7 @@ def parse_cmdline_kwargs(args):
 
 
 
-def main(args, build_fn=None):
+def main(args, build_fn=None, vae_params=None):
     # configure logger, disable logging in child MPI processes (with rank > 0)
 
     arg_parser = common_arg_parser()
@@ -208,7 +208,7 @@ def main(args, build_fn=None):
         logger.configure(format_strs=[])
         rank = MPI.COMM_WORLD.Get_rank()
 
-    model, env = train(args, extra_args, build_env_fn=build_fn or build_env)
+    model, env = train(args, extra_args, build_env_fn=build_fn or build_env, vae_params=vae_params)
     env.close()
 
     if args.play:

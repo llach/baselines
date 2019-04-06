@@ -1,15 +1,16 @@
-import time
 import datetime
-import numpy as np
-import os.path as osp
-from baselines import logger
+import time
 from collections import deque
+
+import numpy as np
+from forkan.common.csv_logger import CSVLogger
+from forkan.common.tf_utils import vector_summary, scalar_summary
+from forkan.common.utils import log_alg
+
+from baselines import logger
 from baselines.common import explained_variance, set_global_seeds, colorize
 from baselines.common.policies import build_policy
 from baselines.common.tf_util import get_session
-from forkan.common.utils import log_alg
-from forkan.common.tf_utils import vector_summary, scalar_summary
-from forkan.common.csv_logger import CSVLogger
 
 try:
     from mpi4py import MPI
@@ -24,10 +25,10 @@ def constfn(val):
     return f
 
 def learn(*, network, env, total_timesteps, eval_env = None, seed=None, nsteps=2048, ent_coef=0.0, lr=3e-4,
-            vf_coef=0.5,  max_grad_norm=0.5, gamma=0.99, lam=0.95,
-            log_interval=10, nminibatches=4, noptepochs=4, cliprange=0.2, vae_model=None,
-            save_interval=0, load_path=None, model_fn=None, env_id=None, play=False, save=True, tensorboard=False, k=None,
-            **network_kwargs):
+          vf_coef=0.5, max_grad_norm=0.5, gamma=0.99, lam=0.95,
+          log_interval=10, nminibatches=4, noptepochs=4, cliprange=0.2, vae_params=None,
+          save_interval=0, load_path=None, model_fn=None, env_id=None, play=False, save=True, tensorboard=False, k=None,
+          **network_kwargs):
     '''
     Learn policy using PPO algorithm (https://arxiv.org/abs/1707.06347)
 
@@ -104,8 +105,26 @@ def learn(*, network, env, total_timesteps, eval_env = None, seed=None, nsteps=2
     nbatch = nenvs * nsteps
     nbatch_train = nbatch // nminibatches
 
+    if hasattr(env, 'vae_name'):
+        vae = env.vae_name.split('lat')[0][:-1]
+    else:
+        vae = None
+
+    if vae_params is None:
+        models = 'd'
+        with_vae = False
+    else:
+        with_vae = True
+        if 'init_from' in vae_params:
+            models = 'retrain'
+        else:
+            models = 'scratch'
+
+    savepath, env_id_lower = log_alg('ppo2', env_id, locals(), vae, num_envs=env.num_envs, save=save, lr=lr, k=k,
+                                     seed=seed, model=models)
+
     # Instantiate the model object (that creates act_model and train_model)
-    if vae_model is None:
+    if vae_params is None:
         from baselines.ppo2.model import Model
         model = Model(policy=policy, ob_space=ob_space, ac_space=ac_space, nbatch_act=nenvs, nbatch_train=nbatch_train,
                       nsteps=nsteps, ent_coef=ent_coef, vf_coef=vf_coef,
@@ -119,8 +138,8 @@ def learn(*, network, env, total_timesteps, eval_env = None, seed=None, nsteps=2
     else:
         from baselines.ppo2.vae_model import VAEModel
         from baselines.ppo2.vae_runner import VAERunner
-        model = VAEModel(vae_name=vae_model, k=k, policy=policy, ob_space=ob_space, ac_space=ac_space, nbatch_act=nenvs, nbatch_train=nbatch_train,
-                         nsteps=nsteps, ent_coef=ent_coef, vf_coef=vf_coef,
+        model = VAEModel(k=k, policy=policy, ob_space=ob_space, ac_space=ac_space, nbatch_act=nenvs, nbatch_train=nbatch_train,
+                         nsteps=nsteps, ent_coef=ent_coef, vf_coef=vf_coef, savepath=savepath, env=env,vae_params=vae_params,
                          max_grad_norm=max_grad_norm)
         if load_path is not None:
             model.load(load_path)
@@ -137,16 +156,12 @@ def learn(*, network, env, total_timesteps, eval_env = None, seed=None, nsteps=2
     # Start total timer
     tfirststart = time.time()
 
-    if hasattr(env, 'vae_name'):
-        vae = env.vae_name.split('lat')[0][:-1]
-    else:
-        vae = None
-
-    savepath, env_id_lower = log_alg('ppo2', env_id, locals(), vae, num_envs=env.num_envs, save=save, lr=lr, k=k,
-                                     seed=seed, model=vae_model or 'default')
-
     csv_header = ['timestamp', "nupdates", "total_timesteps", "fps", "policy_entropy", "value_loss", "policy_loss",
                   "explained_variance", "mean_reward"]
+
+    if with_vae:
+        csv_header +=['rec-loss', 'kl-loss'] + ['z{}-kl'.format(i) for i in range(model.vae.latent_dim)]
+
     csv = CSVLogger('{}progress.csv'.format(savepath), *csv_header)
 
     buf = []
@@ -158,9 +173,10 @@ def learn(*, network, env, total_timesteps, eval_env = None, seed=None, nsteps=2
         import os
         fw = tf.summary.FileWriter('{}/ppo2/{}/'.format(os.environ['HOME'], savepath.split('/')[-2]), s.graph)
 
-        pl_ph = tf.placeholder(tf.float32, (), name='policy-loss')
-        pe_ph = tf.placeholder(tf.float32, (), name='policy-entropy')
-        vl_ph = tf.placeholder(tf.float32, (), name='value-loss')
+        with tf.variable_scope('losses'):
+            pl_ph = tf.placeholder(tf.float32, (), name='policy-loss')
+            pe_ph = tf.placeholder(tf.float32, (), name='policy-entropy')
+            vl_ph = tf.placeholder(tf.float32, (), name='value-loss')
         rew_ph = tf.placeholder(tf.float32, (), name='reward')
         ac_ph = tf.placeholder(tf.float32, (nbatch, 1), name='actions')
         ac_clip_ph = tf.placeholder(tf.float32, (nbatch, 1), name='actions')
@@ -174,6 +190,16 @@ def learn(*, network, env, total_timesteps, eval_env = None, seed=None, nsteps=2
         scalar_summary('policy-loss', pl_ph)
         scalar_summary('policy-entropy', pe_ph)
         vector_summary('actions', ac_ph)
+
+        if with_vae:
+            rel_ph = tf.placeholder(tf.float32, (), name='rec-loss')
+            kll_ph = tf.placeholder(tf.float32, (), name='rec-loss')
+            klls_ph = [tf.placeholder(tf.float32, (), name=f'z{i}-kl') for i in range(model.vae.latent_dim)]
+
+            scalar_summary('reconstruction-loss', rel_ph)
+            scalar_summary('kl-loss', kll_ph)
+            for i in range(model.vae.latent_dim):
+                scalar_summary(f'z{i}-kl', klls_ph[i])
 
         merged_ = tf.summary.merge_all()
 
@@ -211,6 +237,10 @@ def learn(*, network, env, total_timesteps, eval_env = None, seed=None, nsteps=2
 
         # Here what we're going to do is for each minibatch calculate the loss and append it.
         mblossvals = []
+        re_l = []
+        kl_l = []
+        kl_ls = []
+
         if states is None or states == []: # nonrecurrent version
             # Index of each element of batch_size
             # Create the indices array
@@ -223,7 +253,12 @@ def learn(*, network, env, total_timesteps, eval_env = None, seed=None, nsteps=2
                     end = start + nbatch_train
                     mbinds = inds[start:end]
                     slices = (arr[mbinds] for arr in (obs, returns, masks, actions, values, neglogpacs))
-                    mblossvals.append(model.train(lrnow, cliprangenow, *slices))
+                    if with_vae:
+                        res, kl_losses, re_loss, kl_loss = model.train(lrnow, cliprangenow, *slices)
+                        mblossvals.append(res)
+                        re_l.append(re_loss)
+                        kl_l.append(kl_loss)
+                        kl_ls.append(kl_losses)
         else: # recurrent version
             assert nenvs % nminibatches == 0
             envsperbatch = nenvs // nminibatches
@@ -238,10 +273,19 @@ def learn(*, network, env, total_timesteps, eval_env = None, seed=None, nsteps=2
                     mbflatinds = flatinds[mbenvinds].ravel()
                     slices = (arr[mbflatinds] for arr in (obs, returns, masks, actions, values, neglogpacs))
                     mbstates = states[mbenvinds]
-                    mblossvals.append(model.train(lrnow, cliprangenow, *slices, mbstates))
+                    if with_vae:
+                        res, kl_losses, re_loss, kl_loss = model.train(lrnow, cliprangenow, *slices, mbstates)
+                        mblossvals.append(res)
+                        re_l.append(re_loss)
+                        kl_l.append(kl_loss)
+                        kl_ls.append(kl_losses)
 
         # Feedforward --> get losses --> update
         lossvals = np.mean(mblossvals, axis=0)
+        re_l = np.mean(re_l, axis=0)
+        kl_l = np.mean(kl_l, axis=0)
+        kl_ls = np.mean(kl_ls, axis=0)
+
         # End timer
         tnow = time.time()
         # Calculate the fps (frame per second)
@@ -252,19 +296,41 @@ def learn(*, network, env, total_timesteps, eval_env = None, seed=None, nsteps=2
         ev = explained_variance(values, returns)
 
         if tensorboard:
-            summary = s.run(merged_, feed_dict={
-                pl_ph: lossvals[0],
-                vl_ph: lossvals[1],
-                pe_ph: lossvals[2],
-                rew_ph: safemean([epinfo['r'] for epinfo in epinfobuf]),
-                ac_ph: actions,
-                ac_clip_ph: np.clip(actions, -2, 2),
-            })
+            if with_vae:
+                fd = {
+                    pl_ph: lossvals[0],
+                    vl_ph: lossvals[1],
+                    pe_ph: lossvals[2],
+                    rew_ph: safemean([epinfo['r'] for epinfo in epinfobuf]),
+                    ac_ph: actions,
+                    ac_clip_ph: np.clip(actions, -2, 2),
+                    rel_ph: re_l,
+                    kll_ph: kl_l,
+                }
+                for i, kph in enumerate(klls_ph):
+                    fd.update({kph: kl_ls[i]})
+
+                summary = s.run(merged_, feed_dict=fd)
+            else:
+                summary = s.run(merged_, feed_dict={
+                    pl_ph: lossvals[0],
+                    vl_ph: lossvals[1],
+                    pe_ph: lossvals[2],
+                    rew_ph: safemean([epinfo['r'] for epinfo in epinfobuf]),
+                    ac_ph: actions,
+                    ac_clip_ph: np.clip(actions, -2, 2),
+                })
 
             fw.add_summary(summary, update*nbatch)
 
-        csv.writeline(datetime.datetime.now().isoformat(), update, update * nbatch, fps, float(lossvals[2]),
-                      float(lossvals[1]), float(lossvals[0]), float(ev), float(safemean([epinfo['r'] for epinfo in epinfobuf])))
+        if with_vae:
+            csv.writeline(datetime.datetime.now().isoformat(), update, update * nbatch, fps, float(lossvals[2]),
+                          float(lossvals[1]), float(lossvals[0]), float(ev),
+                          float(safemean([epinfo['r'] for epinfo in epinfobuf])),
+                          re_l, kl_l, *kl_ls)
+        else:
+            csv.writeline(datetime.datetime.now().isoformat(), update, update * nbatch, fps, float(lossvals[2]),
+                         float(lossvals[1]), float(lossvals[0]), float(ev), float(safemean([epinfo['r'] for epinfo in epinfobuf])))
 
         if update % log_interval == 0 or update == 1:
             logger.logkv("serial_timesteps", update*nsteps)
