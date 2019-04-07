@@ -177,11 +177,13 @@ class VAEModel(object):
         return am.sess.run([am.action, am.vf, am.state, am.neglogp], feed_dict=feed_dict)
 
     def save(self, savepath):
-        save_variables(savepath, tf.trainable_variables('ppo2_model'), sess=self.sess)
+        print('saving model ... ')
+        save_variables(f'{savepath}/model', tf.trainable_variables('ppo2_model'), sess=self.sess)
         self.vae.save()
 
     def load(self, loadpath):
-        load_variables(loadpath, tf.trainable_variables('ppo2_model'), sess=self.sess)
+        print('loading model ...')
+        load_variables(f'{loadpath}/model', tf.trainable_variables('ppo2_model'), sess=self.sess)
         self.vae.load()
 
     def train(self, lr, cliprange, obs, returns, masks, actions, values, neglogpacs, states=None):
