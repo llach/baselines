@@ -29,7 +29,7 @@ class VAEModel(object):
     - Save load the model
     """
     def __init__(self, k, policy, ob_space, ac_space, nbatch_act, nbatch_train, savepath, env, vae_params,
-                nsteps, ent_coef, vf_coef, max_grad_norm, microbatch_size=None):
+                nsteps, ent_coef, vf_coef, max_grad_norm, microbatch_size=None, with_kl=False):
         self.sess = sess = get_session()
 
         v_in_shape = env.observation_space.shape[:-1] + (1,)
@@ -106,11 +106,14 @@ class VAEModel(object):
         # 1. Get the model parameters
         if retrain:
             params = tf.trainable_variables('ppo2_model') + tf.trainable_variables('vae/encoder')
+            if with_kl:
+                print('adding KL to loss')
+                loss += self.vae.kl_loss
         else:
             params = tf.trainable_variables()
             loss += self.vae.vae_loss
 
-        print('params ', len(params))
+        print('#params ', len(params))
         # 2. Build our trainer
         if MPI is not None:
             self.trainer = MpiAdamOptimizer(MPI.COMM_WORLD, learning_rate=LR, epsilon=1e-5)

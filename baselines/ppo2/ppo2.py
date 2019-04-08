@@ -120,8 +120,15 @@ def learn(*, network, env, total_timesteps, eval_env = None, seed=None, nsteps=2
         else:
             models = 'scratch'
 
+        if 'with_kl' in vae_params:
+            with_kl = True
+            vae_params.pop('with_kl')
+        else:
+            with_kl = False
+
+
     savepath, env_id_lower = log_alg('ppo2', env_id, locals(), vae, num_envs=env.num_envs, save=save, lr=lr, k=k,
-                                     seed=seed, model=models)
+                                     seed=seed, model=models, with_kl=with_kl)
 
     # Instantiate the model object (that creates act_model and train_model)
     if vae_params is None:
@@ -138,9 +145,10 @@ def learn(*, network, env, total_timesteps, eval_env = None, seed=None, nsteps=2
     else:
         from baselines.ppo2.vae_model import VAEModel
         from baselines.ppo2.vae_runner import VAERunner
+
         model = VAEModel(k=k, policy=policy, ob_space=ob_space, ac_space=ac_space, nbatch_act=nenvs, nbatch_train=nbatch_train,
                          nsteps=nsteps, ent_coef=ent_coef, vf_coef=vf_coef, savepath=savepath, env=env,vae_params=vae_params,
-                         max_grad_norm=max_grad_norm)
+                         max_grad_norm=max_grad_norm, with_kl=with_kl)
         if load_path is not None:
             model.load(load_path)
         # Instantiate the runner object
