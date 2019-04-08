@@ -113,6 +113,7 @@ def learn(*, network, env, total_timesteps, eval_env = None, seed=None, nsteps=2
     if vae_params is None:
         models = 'd'
         with_vae = False
+        with_kl = False
     else:
         with_vae = True
         if 'init_from' in vae_params:
