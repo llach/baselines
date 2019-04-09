@@ -270,6 +270,8 @@ def learn(*, network, env, total_timesteps, eval_env = None, seed=None, nsteps=2
                         re_l.append(re_loss)
                         kl_l.append(kl_loss)
                         kl_ls.append(kl_losses)
+                    else:
+                        mblossvals.append(model.train(lrnow, cliprangenow, *slices))
         else: # recurrent version
             assert nenvs % nminibatches == 0
             envsperbatch = nenvs // nminibatches
@@ -290,6 +292,8 @@ def learn(*, network, env, total_timesteps, eval_env = None, seed=None, nsteps=2
                         re_l.append(re_loss)
                         kl_l.append(kl_loss)
                         kl_ls.append(kl_losses)
+                    else:
+                        mblossvals.append(model.train(lrnow, cliprangenow, *slices, mbstates))
 
         # Feedforward --> get losses --> update
         lossvals = np.mean(mblossvals, axis=0)
