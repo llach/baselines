@@ -108,7 +108,7 @@ class VAEModel(object):
             params = tf.trainable_variables('ppo2_model') + tf.trainable_variables('vae/encoder')
             if with_kl:
                 print('adding KL to loss')
-                loss += self.vae.kl_loss
+                loss += (self.vae.beta * self.vae.kl_loss)
         else:
             params = tf.trainable_variables()
             loss += self.vae.vae_loss

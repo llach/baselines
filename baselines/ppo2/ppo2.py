@@ -117,16 +117,18 @@ def learn(*, network, env, total_timesteps, eval_env = None, seed=None, nsteps=2
     else:
         with_vae = True
         if 'init_from' in vae_params:
-            models = 'retrain'
+            models = 'retrain-' + vae_params['init_from'].split('lat')[0][:-1].split('-')[-1]
         else:
-            models = 'scratch'
+            if 'beta' in vae_params:
+                models = 'scratch-b' + str(vae_params['beta'])
+            else:
+                models = 'scratch-b1.0'
 
         if 'with_kl' in vae_params:
             with_kl = True
             vae_params.pop('with_kl')
         else:
             with_kl = False
-
 
     savepath, env_id_lower = log_alg('ppo2', env_id, locals(), vae, num_envs=env.num_envs, save=save, lr=lr, k=k,
                                      seed=seed, model=models, with_kl=with_kl)
