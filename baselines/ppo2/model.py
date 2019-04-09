@@ -1,5 +1,4 @@
 import tensorflow as tf
-import functools
 
 from baselines.common.tf_util import get_session, save_variables, load_variables
 from baselines.common.tf_util import initialize
@@ -119,13 +118,18 @@ class Model(object):
         self.value = act_model.value
         self.initial_state = act_model.initial_state
 
-        self.save = functools.partial(save_variables, sess=sess)
-        self.load = functools.partial(load_variables, sess=sess)
-
         initialize()
         global_variables = tf.get_collection(tf.GraphKeys.GLOBAL_VARIABLES, scope="")
         if MPI is not None:
             sync_from_root(sess, global_variables) #pylint: disable=E1101
+
+    def save(self, savepath):
+        print('saving model ... ')
+        save_variables(f'{savepath}/model', tf.trainable_variables('ppo2_model'), sess=self.sess)
+
+    def load(self, loadpath):
+        print('loading model ...')
+        load_variables(f'{loadpath}/model', tf.trainable_variables('ppo2_model'), sess=self.sess)
 
     def train(self, lr, cliprange, obs, returns, masks, actions, values, neglogpacs, states=None):
         # Here we calculate advantage A(s,a) = R + yV(s') - V(s)
