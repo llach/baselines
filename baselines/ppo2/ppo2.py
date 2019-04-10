@@ -207,6 +207,10 @@ def learn(*, network, env, total_timesteps, eval_env = None, seed=None, nsteps=2
         scalar_summary('policy-loss', pl_ph, scope='rl-loss')
         scalar_summary('policy-entropy', pe_ph, scope='rl-loss')
 
+        scalar_summary('value-loss-scaled', vl_scaled_ph, scope='scaled-rl-loss')
+        scalar_summary('policy-loss-scaled', pl_scaled_ph, scope='scaled-rl-loss')
+        scalar_summary('policy-entropy-scaled', pe_scaled_ph, scope='scaled-rl-loss')
+
         if with_vae:
             rel_ph = tf.placeholder(tf.float32, (), name='rec-loss')
             kll_ph = tf.placeholder(tf.float32, (), name='rec-loss')
