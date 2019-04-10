@@ -4,7 +4,7 @@ from collections import deque
 
 import numpy as np
 from forkan.common.csv_logger import CSVLogger
-from forkan.common.tf_utils import vector_summary, scalar_summary
+from forkan.common.tf_utils import scalar_summary
 from forkan.common.utils import log_alg
 
 from baselines import logger
@@ -25,7 +25,7 @@ def constfn(val):
     return f
 
 def learn(*, network, env, total_timesteps, eval_env = None, seed=None, nsteps=2048, ent_coef=0.0, lr=3e-4,
-          vf_coef=0.5, max_grad_norm=0.5, gamma=0.99, lam=0.95,
+          vf_coef=0.5, pg_coef=1.0, max_grad_norm=0.5, gamma=0.99, lam=0.95,
           log_interval=10, nminibatches=4, noptepochs=4, cliprange=0.2, vae_params=None,
           save_interval=50, load_path=None, model_fn=None, env_id=None, play=False, save=True, tensorboard=False, k=None,
           **network_kwargs):
@@ -150,7 +150,7 @@ def learn(*, network, env, total_timesteps, eval_env = None, seed=None, nsteps=2
         from baselines.ppo2.vae_runner import VAERunner
 
         model = VAEModel(k=k, policy=policy, ob_space=ob_space, ac_space=ac_space, nbatch_act=nenvs, nbatch_train=nbatch_train,
-                         nsteps=nsteps, ent_coef=ent_coef, vf_coef=vf_coef, savepath=savepath, env=env,vae_params=vae_params,
+                         nsteps=nsteps, ent_coef=ent_coef, vf_coef=vf_coef, pg_coef=pg_coef, savepath=savepath, env=env,vae_params=vae_params,
                          max_grad_norm=max_grad_norm, with_kl=with_kl)
         if load_path is not None:
             model.load(load_path)
@@ -188,6 +188,12 @@ def learn(*, network, env, total_timesteps, eval_env = None, seed=None, nsteps=2
             pl_ph = tf.placeholder(tf.float32, (), name='policy-loss')
             pe_ph = tf.placeholder(tf.float32, (), name='policy-entropy')
             vl_ph = tf.placeholder(tf.float32, (), name='value-loss')
+
+        with tf.variable_scope('scaled-losses'):
+            pl_scaled_ph = tf.placeholder(tf.float32, (), name='policy-loss-scaled')
+            pe_scaled_ph = tf.placeholder(tf.float32, (), name='policy-entropy-scaled')
+            vl_scaled_ph = tf.placeholder(tf.float32, (), name='value-loss-scaled')
+
         rew_ph = tf.placeholder(tf.float32, (), name='reward')
         ac_ph = tf.placeholder(tf.float32, (nbatch, 1), name='actions')
         ac_clip_ph = tf.placeholder(tf.float32, (nbatch, 1), name='actions')
@@ -200,7 +206,6 @@ def learn(*, network, env, total_timesteps, eval_env = None, seed=None, nsteps=2
         scalar_summary('value-loss', vl_ph, scope='rl-loss')
         scalar_summary('policy-loss', pl_ph, scope='rl-loss')
         scalar_summary('policy-entropy', pe_ph, scope='rl-loss')
-        vector_summary('actions', ac_ph)
 
         if with_vae:
             rel_ph = tf.placeholder(tf.float32, (), name='rec-loss')
@@ -316,6 +321,9 @@ def learn(*, network, env, total_timesteps, eval_env = None, seed=None, nsteps=2
                     pl_ph: lossvals[0],
                     vl_ph: lossvals[1],
                     pe_ph: lossvals[2],
+                    pl_scaled_ph: lossvals[0] * pg_coef,
+                    vl_scaled_ph: lossvals[1] * vf_coef,
+                    pe_scaled_ph: lossvals[2] * ent_coef,
                     rew_ph: safemean([epinfo['r'] for epinfo in epinfobuf]),
                     ac_ph: actions,
                     ac_clip_ph: np.clip(actions, -2, 2),

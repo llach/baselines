@@ -29,7 +29,7 @@ class VAEModel(object):
     - Save load the model
     """
     def __init__(self, k, policy, ob_space, ac_space, nbatch_act, nbatch_train, savepath, env, vae_params,
-                nsteps, ent_coef, vf_coef, max_grad_norm, microbatch_size=None, with_kl=False):
+                nsteps, ent_coef, vf_coef, pg_coef, max_grad_norm, microbatch_size=None, with_kl=False):
         self.sess = sess = get_session()
 
         v_in_shape = env.observation_space.shape[:-1] + (1,)
@@ -100,7 +100,7 @@ class VAEModel(object):
         clipfrac = tf.reduce_mean(tf.to_float(tf.greater(tf.abs(ratio - 1.0), CLIPRANGE)))
 
         # Total loss
-        loss = pg_loss - entropy * ent_coef + vf_loss * vf_coef
+        loss = pg_coef * pg_loss - entropy * ent_coef + vf_loss * vf_coef
 
         # UPDATE THE PARAMETERS USING LOSS
         # 1. Get the model parameters
