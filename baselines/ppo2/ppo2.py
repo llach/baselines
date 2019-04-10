@@ -26,7 +26,7 @@ def constfn(val):
 
 def learn(*, network, env, total_timesteps, eval_env = None, seed=None, nsteps=2048, ent_coef=0.0, lr=3e-4,
           vf_coef=0.5, pg_coef=1.0, max_grad_norm=0.5, gamma=0.99, lam=0.95,
-          log_interval=10, nminibatches=4, noptepochs=4, cliprange=0.2, vae_params=None,
+          log_interval=10, nminibatches=4, noptepochs=4, cliprange=0.2, vae_params=None, log_weights=False,
           save_interval=50, load_path=None, model_fn=None, env_id=None, play=False, save=True, tensorboard=False, k=None,
           **network_kwargs):
     '''
@@ -210,6 +210,26 @@ def learn(*, network, env, total_timesteps, eval_env = None, seed=None, nsteps=2
         scalar_summary('value-loss-scaled', vl_scaled_ph, scope='scaled-rl-loss')
         scalar_summary('policy-loss-scaled', pl_scaled_ph, scope='scaled-rl-loss')
         scalar_summary('policy-entropy-scaled', pe_scaled_ph, scope='scaled-rl-loss')
+
+        if log_weights:
+            if with_vae:
+                vvs = tf.trainable_variables('vae')
+                pvs = tf.trainable_variables('ppo2_model')
+
+                with tf.variable_scope('policy-weights'):
+                    for v in pvs:
+                        tf.summary.histogram('{}'.format(v.name), v)
+
+                with tf.variable_scope('vae-weights'):
+                    for v in vvs:
+                        tf.summary.histogram('{}'.format(v.name), v)
+
+            else:
+                pvs = tf.trainable_variables('ppo2_model')
+
+                with tf.variable_scope('policy-weights'):
+                    for v in pvs:
+                        tf.summary.histogram('{}'.format(v.name), v)
 
         if with_vae:
             rel_ph = tf.placeholder(tf.float32, (), name='rec-loss')
