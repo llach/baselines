@@ -25,7 +25,7 @@ def constfn(val):
     return f
 
 def learn(*, network, env, total_timesteps, eval_env = None, seed=None, nsteps=2048, ent_coef=0.0, lr=3e-4,
-          vf_coef=0.5, pg_coef=1.0, max_grad_norm=0.5, gamma=0.99, lam=0.95,
+          vf_coef=0.5, pg_coef=1.0, max_grad_norm=0.5, gamma=0.99, lam=0.95, rl_coef=1.0,
           log_interval=10, nminibatches=4, noptepochs=4, cliprange=0.2, vae_params=None, log_weights=False,
           save_interval=50, load_path=None, model_fn=None, env_id=None, play=False, save=True, tensorboard=False, k=None,
           **network_kwargs):
@@ -131,7 +131,7 @@ def learn(*, network, env, total_timesteps, eval_env = None, seed=None, nsteps=2
             with_kl = False
 
     savepath, env_id_lower = log_alg('ppo2', env_id, locals(), vae, num_envs=env.num_envs, save=save, lr=lr, k=k,
-                                     seed=seed, model=models, with_kl=with_kl)
+                                     seed=seed, model=models, with_kl=with_kl, rl_coef=rl_coef)
 
     # Instantiate the model object (that creates act_model and train_model)
     if vae_params is None:
@@ -151,7 +151,7 @@ def learn(*, network, env, total_timesteps, eval_env = None, seed=None, nsteps=2
 
         model = VAEModel(k=k, policy=policy, ob_space=ob_space, ac_space=ac_space, nbatch_act=nenvs, nbatch_train=nbatch_train,
                          nsteps=nsteps, ent_coef=ent_coef, vf_coef=vf_coef, pg_coef=pg_coef, savepath=savepath, env=env,vae_params=vae_params,
-                         max_grad_norm=max_grad_norm, with_kl=with_kl)
+                         max_grad_norm=max_grad_norm, with_kl=with_kl, rl_coef=rl_coef)
         if load_path is not None:
             model.load(load_path)
         # Instantiate the runner object
