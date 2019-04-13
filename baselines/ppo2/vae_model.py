@@ -29,13 +29,13 @@ class VAEModel(object):
     - Save load the model
     """
     def __init__(self, k, policy, ob_space, ac_space, nbatch_act, nbatch_train, savepath, env, vae_params, rl_coef,
-                nsteps, ent_coef, vf_coef, pg_coef, max_grad_norm, microbatch_size=None, with_kl=False):
+                v_net, nsteps, ent_coef, vf_coef, pg_coef, max_grad_norm, microbatch_size=None, with_kl=False):
         self.sess = sess = get_session()
 
         v_in_shape = env.observation_space.shape[:-1] + (1,)
 
         # it's important to pass the session we are using in ppo
-        self.vae = RetrainVAE(savepath, v_in_shape, sess=self.sess, **vae_params)
+        self.vae = RetrainVAE(savepath, v_in_shape, network=v_net, sess=self.sess, **vae_params)
 
         retrain = 'init_from' in vae_params
 
