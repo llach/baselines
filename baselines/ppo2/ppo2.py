@@ -25,7 +25,7 @@ def constfn(val):
     return f
 
 def learn(*, network, env, total_timesteps, eval_env = None, seed=None, nsteps=2048, ent_coef=0.0, lr=3e-4,
-          vf_coef=0.5, pg_coef=1.0, max_grad_norm=0.5, gamma=0.99, lam=0.95, rl_coef=1.0, v_net='pendulum',
+          vf_coef=0.5, pg_coef=1.0, max_grad_norm=0.5, gamma=0.99, lam=0.95, rl_coef=1.0, v_net='pendulum', f16=False,
           log_interval=10, nminibatches=4, noptepochs=4, cliprange=0.2, vae_params=None, log_weights=False,
           save_interval=50, load_path=None, model_fn=None, env_id=None, play=False, save=True, tensorboard=False, k=None,
           **network_kwargs):
@@ -175,6 +175,19 @@ def learn(*, network, env, total_timesteps, eval_env = None, seed=None, nsteps=2
 
     csv = CSVLogger('{}progress.csv'.format(savepath), *csv_header)
 
+    if f16:
+
+        import  tensorflow as tf
+
+        print('casting to bfloat16')
+        for var in tf.global_variables():
+            if (var.dtype == np.float32):
+                tf.add_to_collection('assignOps', var.assign(
+                    tf.cast(var, tf.bfloat16)))
+            else:
+                tf.add_to_collection('assignOps', var.assign(var))
+        get_session().run(tf.get_collection('assignOps'))
+
     buf = []
     t = 0
     if tensorboard:
@@ -185,18 +198,18 @@ def learn(*, network, env, total_timesteps, eval_env = None, seed=None, nsteps=2
         fw = tf.summary.FileWriter('{}/ppo2/{}/'.format(os.environ['HOME'], savepath.split('/')[-2]), s.graph)
 
         with tf.variable_scope('losses'):
-            pl_ph = tf.placeholder(tf.float32, (), name='policy-loss')
-            pe_ph = tf.placeholder(tf.float32, (), name='policy-entropy')
-            vl_ph = tf.placeholder(tf.float32, (), name='value-loss')
+            pl_ph = tf.placeholder(tf.bfloat16, (), name='policy-loss')
+            pe_ph = tf.placeholder(tf.bfloat16, (), name='policy-entropy')
+            vl_ph = tf.placeholder(tf.bfloat16, (), name='value-loss')
 
         with tf.variable_scope('scaled-losses'):
-            pl_scaled_ph = tf.placeholder(tf.float32, (), name='policy-loss-scaled')
-            pe_scaled_ph = tf.placeholder(tf.float32, (), name='policy-entropy-scaled')
-            vl_scaled_ph = tf.placeholder(tf.float32, (), name='value-loss-scaled')
+            pl_scaled_ph = tf.placeholder(tf.bfloat16, (), name='policy-loss-scaled')
+            pe_scaled_ph = tf.placeholder(tf.bfloat16, (), name='policy-entropy-scaled')
+            vl_scaled_ph = tf.placeholder(tf.bfloat16, (), name='value-loss-scaled')
 
-        rew_ph = tf.placeholder(tf.float32, (), name='reward')
-        ac_ph = tf.placeholder(tf.float32, (nbatch, 1), name='actions')
-        ac_clip_ph = tf.placeholder(tf.float32, (nbatch, 1), name='actions')
+        rew_ph = tf.placeholder(tf.bfloat16, (), name='reward')
+        ac_ph = tf.placeholder(tf.bfloat16, (nbatch, 1), name='actions')
+        ac_clip_ph = tf.placeholder(tf.bfloat16, (nbatch, 1), name='actions')
 
         tf.summary.histogram('actions-hist', ac_ph)
         tf.summary.histogram('actions-hist-clipped', ac_clip_ph)
@@ -232,9 +245,9 @@ def learn(*, network, env, total_timesteps, eval_env = None, seed=None, nsteps=2
                         tf.summary.histogram('{}'.format(v.name), v)
 
         if with_vae:
-            rel_ph = tf.placeholder(tf.float32, (), name='rec-loss')
-            kll_ph = tf.placeholder(tf.float32, (), name='rec-loss')
-            klls_ph = [tf.placeholder(tf.float32, (), name=f'z{i}-kl') for i in range(model.vae.latent_dim)]
+            rel_ph = tf.placeholder(tf.bfloat16, (), name='rec-loss')
+            kll_ph = tf.placeholder(tf.bfloat16, (), name='rec-loss')
+            klls_ph = [tf.placeholder(tf.bfloat16, (), name=f'z{i}-kl') for i in range(model.vae.latent_dim)]
 
             scalar_summary('reconstruction-loss', rel_ph, scope='vae-loss')
             scalar_summary('kl-loss', kll_ph, scope='vae-loss')
