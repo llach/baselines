@@ -266,6 +266,7 @@ def learn(*, network, env, total_timesteps, eval_env = None, seed=None, nsteps=2
 
         merged_ = tf.summary.merge_all()
 
+    best_rew = -np.inf
     print('strarting main loop ...')
     nupdates = total_timesteps//nbatch
     for update in range(1, nupdates+1):
@@ -281,7 +282,6 @@ def learn(*, network, env, total_timesteps, eval_env = None, seed=None, nsteps=2
         obs, returns, masks, actions, values, neglogpacs, states, epinfos = runner.run() #pylint: disable=E0632
         if eval_env is not None:
             eval_obs, eval_returns, eval_masks, eval_actions, eval_values, eval_neglogpacs, eval_states, eval_epinfos = eval_runner.run() #pylint: disable=E0632
-
 
         """ This is for observation debugging. Uncomment with caution. """
         # import matplotlib.pyplot as plt
@@ -353,6 +353,12 @@ def learn(*, network, env, total_timesteps, eval_env = None, seed=None, nsteps=2
         re_l = np.mean(re_l, axis=0)
         kl_l = np.mean(kl_l, axis=0)
         kl_ls = np.mean(kl_ls, axis=0)
+        mrew = safemean([epinfo['r'] for epinfo in epinfobuf])
+
+        if mrew > best_rew:
+            logger.log(f'reward: {best_rew} -> {mrew}. saving model.')
+            best_rew = mrew
+            model.save(f'{savepath}/best/')
 
         # End timer
         tnow = time.time()
@@ -375,7 +381,7 @@ def learn(*, network, env, total_timesteps, eval_env = None, seed=None, nsteps=2
                     ak_ph: lossvals[-2],
                     cf_ph: lossvals[-1],
                     stop_ph: int(lossvals[-2] > (1.5 * target_kl)),
-                    rew_ph: safemean([epinfo['r'] for epinfo in epinfobuf]),
+                    rew_ph: mrew,
                     ac_ph: actions,
                     ac_clip_ph: np.clip(actions, -2, 2),
                     rel_ph: re_l,
@@ -393,7 +399,7 @@ def learn(*, network, env, total_timesteps, eval_env = None, seed=None, nsteps=2
                     ak_ph: lossvals[-2],
                     cf_ph: lossvals[-1],
                     stop_ph: int(lossvals[-2] > (1.5 * target_kl)),
-                    rew_ph: safemean([epinfo['r'] for epinfo in epinfobuf]),
+                    rew_ph: mrew,
                     ac_ph: actions,
                     ac_clip_ph: np.clip(actions, -2, 2),
                 })
@@ -403,11 +409,11 @@ def learn(*, network, env, total_timesteps, eval_env = None, seed=None, nsteps=2
         if with_vae:
             csv.writeline(datetime.datetime.now().isoformat(), update, update * nbatch, fps, float(lossvals[2]),
                           float(lossvals[1]), float(lossvals[0]), float(ev),
-                          float(safemean([epinfo['r'] for epinfo in epinfobuf])), float(lossvals[-2]), float(lossvals[-1]),
+                          float(mrew), float(lossvals[-2]), float(lossvals[-1]),
                           re_l, kl_l, *kl_ls)
         else:
             csv.writeline(datetime.datetime.now().isoformat(), update, update * nbatch, fps, float(lossvals[2]),
-                          float(lossvals[1]), float(lossvals[0]), float(ev), float(safemean([epinfo['r'] for epinfo in epinfobuf])),
+                          float(lossvals[1]), float(lossvals[0]), float(ev), float(mrew),
                           float(lossvals[-2]), float(lossvals[-1]),)
 
         if update % log_interval == 0 or update == 1:
@@ -416,7 +422,7 @@ def learn(*, network, env, total_timesteps, eval_env = None, seed=None, nsteps=2
             logger.logkv("total_timesteps", update*nbatch)
             logger.logkv("fps", fps)
             logger.logkv("explained_variance", float(ev))
-            logger.logkv('eprewmean', safemean([epinfo['r'] for epinfo in epinfobuf]))
+            logger.logkv('eprewmean', mrew)
             logger.logkv('eplenmean', safemean([epinfo['l'] for epinfo in epinfobuf]))
             if eval_env is not None:
                 logger.logkv('eval_eprewmean', safemean([epinfo['r'] for epinfo in eval_epinfobuf]) )
