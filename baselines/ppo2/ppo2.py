@@ -168,7 +168,7 @@ def learn(*, network, env, total_timesteps, eval_env = None, seed=None, nsteps=2
     tfirststart = time.time()
 
     csv_header = ['timestamp', "nupdates", "total_timesteps", "fps", "policy_entropy", "value_loss", "policy_loss",
-                  "explained_variance", "mean_reward"]
+                  "explained_variance", "mean_reward", "approx_kl", "clip_frac"]
 
     if with_vae:
         csv_header +=['rec-loss', 'kl-loss'] + ['z{}-kl'.format(i) for i in range(model.vae.latent_dim)]
@@ -372,6 +372,9 @@ def learn(*, network, env, total_timesteps, eval_env = None, seed=None, nsteps=2
                     pl_scaled_ph: lossvals[0] * pg_coef,
                     vl_scaled_ph: lossvals[1] * vf_coef,
                     pe_scaled_ph: lossvals[2] * ent_coef,
+                    ak_ph: lossvals[-2],
+                    cf_ph: lossvals[-1],
+                    stop_ph: int(lossvals[-2] > (1.5 * target_kl)),
                     rew_ph: safemean([epinfo['r'] for epinfo in epinfobuf]),
                     ac_ph: actions,
                     ac_clip_ph: np.clip(actions, -2, 2),
@@ -400,11 +403,12 @@ def learn(*, network, env, total_timesteps, eval_env = None, seed=None, nsteps=2
         if with_vae:
             csv.writeline(datetime.datetime.now().isoformat(), update, update * nbatch, fps, float(lossvals[2]),
                           float(lossvals[1]), float(lossvals[0]), float(ev),
-                          float(safemean([epinfo['r'] for epinfo in epinfobuf])),
+                          float(safemean([epinfo['r'] for epinfo in epinfobuf])), float(lossvals[-2]), float(lossvals[-1]),
                           re_l, kl_l, *kl_ls)
         else:
             csv.writeline(datetime.datetime.now().isoformat(), update, update * nbatch, fps, float(lossvals[2]),
-                         float(lossvals[1]), float(lossvals[0]), float(ev), float(safemean([epinfo['r'] for epinfo in epinfobuf])))
+                          float(lossvals[1]), float(lossvals[0]), float(ev), float(safemean([epinfo['r'] for epinfo in epinfobuf])),
+                          float(lossvals[-2]), float(lossvals[-1]),)
 
         if update % log_interval == 0 or update == 1:
             logger.logkv("serial_timesteps", update*nsteps)
