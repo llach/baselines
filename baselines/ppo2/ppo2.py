@@ -24,7 +24,7 @@ def constfn(val):
         return val
     return f
 
-def learn(*, network, env, total_timesteps, eval_env = None, seed=None, nsteps=2048, ent_coef=0.0, lr=3e-4,
+def learn(*, network, env, total_timesteps, eval_env = None, seed=None, nsteps=2048, ent_coef=0.0, lr=3e-4, target_kl=0.01,
           vf_coef=0.5, pg_coef=1.0, max_grad_norm=0.5, gamma=0.99, lam=0.95, rl_coef=1.0, v_net='pendulum', f16=False,
           log_interval=10, nminibatches=4, noptepochs=4, cliprange=0.2, vae_params=None, log_weights=False,
           save_interval=50, load_path=None, model_fn=None, env_id=None, play=False, save=True, tensorboard=False, k=None,
@@ -207,6 +207,16 @@ def learn(*, network, env, total_timesteps, eval_env = None, seed=None, nsteps=2
             pe_scaled_ph = tf.placeholder(tf.bfloat16, (), name='policy-entropy-scaled')
             vl_scaled_ph = tf.placeholder(tf.bfloat16, (), name='value-loss-scaled')
 
+        with tf.variable_scope('stopping'):
+            ak_ph = tf.placeholder(tf.bfloat16, (), name='approx-kl')
+            cf_ph = tf.placeholder(tf.bfloat16, (), name='clipfrac')
+            stop_ph = tf.placeholder(tf.uint8, (), name='stopped')
+
+
+        scalar_summary('approx-kl', ak_ph, scope='stopping')
+        scalar_summary('clipfrac', cf_ph, scope='stopping')
+        scalar_summary('stopped', stop_ph, scope='stopping')
+
         rew_ph = tf.placeholder(tf.bfloat16, (), name='reward')
         ac_ph = tf.placeholder(tf.bfloat16, (nbatch, 1), name='actions')
         ac_clip_ph = tf.placeholder(tf.bfloat16, (nbatch, 1), name='actions')
@@ -256,6 +266,7 @@ def learn(*, network, env, total_timesteps, eval_env = None, seed=None, nsteps=2
 
         merged_ = tf.summary.merge_all()
 
+    print('strarting main loop ...')
     nupdates = total_timesteps//nbatch
     for update in range(1, nupdates+1):
         assert nbatch % nminibatches == 0
@@ -376,6 +387,9 @@ def learn(*, network, env, total_timesteps, eval_env = None, seed=None, nsteps=2
                     pl_ph: lossvals[0],
                     vl_ph: lossvals[1],
                     pe_ph: lossvals[2],
+                    ak_ph: lossvals[-2],
+                    cf_ph: lossvals[-1],
+                    stop_ph: int(lossvals[-2] > (1.5 * target_kl)),
                     rew_ph: safemean([epinfo['r'] for epinfo in epinfobuf]),
                     ac_ph: actions,
                     ac_clip_ph: np.clip(actions, -2, 2),
