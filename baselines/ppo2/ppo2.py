@@ -219,7 +219,7 @@ def learn(*, network, env, total_timesteps, eval_env = None, seed=None, nsteps=2
 
         rew_ph = tf.placeholder(tf.bfloat16, (), name='reward')
         ac_ph = tf.placeholder(tf.bfloat16, (nbatch, 1), name='actions')
-        ac_clip_ph = tf.placeholder(tf.bfloat16, (nbatch, 1), name='actions')
+        ac_clip_ph = tf.placeholder(tf.bfloat16, (nbatch, 1), name='actions-clipped')
 
         tf.summary.histogram('actions-hist', ac_ph)
         tf.summary.histogram('actions-hist-clipped', ac_clip_ph)
@@ -396,12 +396,15 @@ def learn(*, network, env, total_timesteps, eval_env = None, seed=None, nsteps=2
                     pl_ph: lossvals[0],
                     vl_ph: lossvals[1],
                     pe_ph: lossvals[2],
+                    pl_scaled_ph: lossvals[0] * pg_coef,
+                    vl_scaled_ph: lossvals[1] * vf_coef,
+                    pe_scaled_ph: lossvals[2] * ent_coef,
                     ak_ph: lossvals[-2],
                     cf_ph: lossvals[-1],
                     stop_ph: int(lossvals[-2] > (1.5 * target_kl)),
                     rew_ph: mrew,
-                    ac_ph: actions,
-                    ac_clip_ph: np.clip(actions, -2, 2),
+                    ac_ph: np.expand_dims(actions, -1),
+                    ac_clip_ph: np.expand_dims(np.clip(actions, -2, 2), -1),
                 })
 
             fw.add_summary(summary, update*nbatch)
