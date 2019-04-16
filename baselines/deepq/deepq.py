@@ -197,6 +197,7 @@ def learn(env,
 
     sess = get_session()
     set_global_seeds(seed)
+    network_kwargs.pop('vae_params')
 
     set_global_seeds(seed)
 
