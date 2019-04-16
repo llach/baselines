@@ -26,7 +26,7 @@ def constfn(val):
 
 def learn(*, network, env, total_timesteps, eval_env = None, seed=None, nsteps=2048, ent_coef=0.0, lr=3e-4, target_kl=0.01,
           vf_coef=0.5, pg_coef=1.0, max_grad_norm=0.5, gamma=0.99, lam=0.95, rl_coef=1.0, v_net='pendulum', f16=False,
-          log_interval=10, nminibatches=4, noptepochs=4, cliprange=0.2, vae_params=None, log_weights=False,
+          log_interval=10, nminibatches=4, noptepochs=4, cliprange=0.2, vae_params=None, log_weights=False, early_stop=False,
           save_interval=50, load_path=None, model_fn=None, env_id=None, play=False, save=True, tensorboard=False, k=None,
           **network_kwargs):
     '''
@@ -131,7 +131,8 @@ def learn(*, network, env, total_timesteps, eval_env = None, seed=None, nsteps=2
             with_kl = False
 
     savepath, env_id_lower = log_alg('ppo2', env_id, locals(), vae, num_envs=env.num_envs, save=save, lr=lr, k=k,
-                                     seed=seed, model=models, with_kl=with_kl, rl_coef=rl_coef)
+                                     seed=seed, model=models, with_kl=with_kl, rl_coef=rl_coef, early_stop=early_stop,
+                                     target_kl=target_kl)
 
     # Instantiate the model object (that creates act_model and train_model)
     if vae_params is None:
@@ -305,6 +306,7 @@ def learn(*, network, env, total_timesteps, eval_env = None, seed=None, nsteps=2
         kl_l = []
         kl_ls = []
 
+        stop = False
         if states is None or states == []: # nonrecurrent version
             # Index of each element of batch_size
             # Create the indices array
@@ -319,12 +321,20 @@ def learn(*, network, env, total_timesteps, eval_env = None, seed=None, nsteps=2
                     slices = (arr[mbinds] for arr in (obs, returns, masks, actions, values, neglogpacs))
                     if with_vae:
                         res, kl_losses, re_loss, kl_loss = model.train(lrnow, cliprangenow, *slices)
+                        pi_kl = res[-2]
                         mblossvals.append(res)
                         re_l.append(re_loss)
                         kl_l.append(kl_loss)
                         kl_ls.append(kl_losses)
                     else:
-                        mblossvals.append(model.train(lrnow, cliprangenow, *slices))
+                        res = model.train(lrnow, cliprangenow, *slices)
+                        pi_kl = res[-2]
+                        mblossvals.append()
+                    if pi_kl > 1.5 * target_kl:
+                        stop = True
+                        break
+                if stop:
+                    break
         else: # recurrent version
             assert nenvs % nminibatches == 0
             envsperbatch = nenvs // nminibatches
@@ -370,42 +380,36 @@ def learn(*, network, env, total_timesteps, eval_env = None, seed=None, nsteps=2
         ev = explained_variance(values, returns)
 
         if tensorboard:
+            fd = {
+                pl_ph: lossvals[0],
+                vl_ph: lossvals[1],
+                pe_ph: lossvals[2],
+                pl_scaled_ph: lossvals[0] * pg_coef,
+                vl_scaled_ph: lossvals[1] * vf_coef,
+                pe_scaled_ph: lossvals[2] * ent_coef,
+                ak_ph: lossvals[-2],
+                cf_ph: lossvals[-1],
+                stop_ph: int(stop),
+                rew_ph: mrew,
+            }
+
             if with_vae:
-                fd = {
-                    pl_ph: lossvals[0],
-                    vl_ph: lossvals[1],
-                    pe_ph: lossvals[2],
-                    pl_scaled_ph: lossvals[0] * pg_coef,
-                    vl_scaled_ph: lossvals[1] * vf_coef,
-                    pe_scaled_ph: lossvals[2] * ent_coef,
-                    ak_ph: lossvals[-2],
-                    cf_ph: lossvals[-1],
-                    stop_ph: int(lossvals[-2] > (1.5 * target_kl)),
-                    rew_ph: mrew,
+                fd.update({
                     ac_ph: actions,
                     ac_clip_ph: np.clip(actions, -2, 2),
                     rel_ph: re_l,
                     kll_ph: kl_l,
-                }
+                })
                 for i, kph in enumerate(klls_ph):
                     fd.update({kph: kl_ls[i]})
 
                 summary = s.run(merged_, feed_dict=fd)
             else:
-                summary = s.run(merged_, feed_dict={
-                    pl_ph: lossvals[0],
-                    vl_ph: lossvals[1],
-                    pe_ph: lossvals[2],
-                    pl_scaled_ph: lossvals[0] * pg_coef,
-                    vl_scaled_ph: lossvals[1] * vf_coef,
-                    pe_scaled_ph: lossvals[2] * ent_coef,
-                    ak_ph: lossvals[-2],
-                    cf_ph: lossvals[-1],
-                    stop_ph: int(lossvals[-2] > (1.5 * target_kl)),
-                    rew_ph: mrew,
+                fd.update({
                     ac_ph: np.expand_dims(actions, -1),
                     ac_clip_ph: np.expand_dims(np.clip(actions, -2, 2), -1),
                 })
+                summary = s.run(merged_, feed_dict=fd)
 
             fw.add_summary(summary, update*nbatch)
 
