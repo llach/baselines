@@ -1,12 +1,16 @@
-from baselines.common import Dataset, explained_variance, fmt_row, zipsame
-from baselines import logger
-import baselines.common.tf_util as U
-import tensorflow as tf, numpy as np
 import time
+from collections import deque
+
+import numpy as np
+import tensorflow as tf
+from mpi4py import MPI
+
+import baselines.common.tf_util as U
+from baselines import logger
+from baselines.common import Dataset, explained_variance, fmt_row, zipsame, colorize
 from baselines.common.mpi_adam import MpiAdam
 from baselines.common.mpi_moments import mpi_moments
-from mpi4py import MPI
-from collections import deque
+
 
 def traj_segment_generator(pi, env, horizon, stochastic):
     t = 0
@@ -141,6 +145,10 @@ def learn(env, policy_fn, *,
 
     assert sum([max_iters>0, max_timesteps>0, max_episodes>0, max_seconds>0])==1, "Only one time constraint permitted"
 
+    # Start total timer
+    tfirststart = time.time()
+    total_timesteps = 20e6
+
     while True:
         if callback: callback(locals(), globals())
         if max_timesteps and timesteps_so_far >= max_timesteps:
@@ -209,7 +217,22 @@ def learn(env, policy_fn, *,
         logger.record_tabular("EpisodesSoFar", episodes_so_far)
         logger.record_tabular("TimestepsSoFar", timesteps_so_far)
         logger.record_tabular("TimeElapsed", time.time() - tstart)
+
         if MPI.COMM_WORLD.Get_rank()==0:
+            # End timer
+            tnow = time.time()
+            # Calculate the fps (frame per second)
+            fps = int(timesteps_so_far / (tnow - tstart))
+
+            perc = (timesteps_so_far / total_timesteps) * 100
+            steps2go = total_timesteps - timesteps_so_far
+            secs2go = steps2go / fps
+            min2go = secs2go / 60
+
+            hrs = int(min2go // 60)
+            mins = int(min2go) % 60
+            print(colorize('ETA: {}h {}min | done {}% '.format(hrs, mins, int(perc)), color='cyan'))
+
             logger.dump_tabular()
 
     return pi
