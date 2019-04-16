@@ -1,33 +1,27 @@
+import datetime
 import os
-import time
 import tempfile
-
-import tensorflow as tf
+import time
 import zipfile
+
 import cloudpickle
 import numpy as np
-import datetime
-import json
+import tensorflow as tf
+from forkan.common.csv_logger import CSVLogger
+from forkan.common.utils import log_alg
+from forkan.models import VAE
+from tqdm import tqdm
 
 import baselines.common.tf_util as U
-from baselines.common.tf_util import load_variables, save_variables
-from baselines import logger
-from baselines.common.schedules import LinearSchedule
-from baselines.common import set_global_seeds
-
 from baselines import deepq
+from baselines import logger
+from baselines.common import set_global_seeds
+from baselines.common.schedules import LinearSchedule
+from baselines.common.tf_util import get_session
+from baselines.common.tf_util import load_variables, save_variables
+from baselines.deepq.models import build_q_func
 from baselines.deepq.replay_buffer import ReplayBuffer, PrioritizedReplayBuffer
 from baselines.deepq.utils import ObservationInput
-
-from baselines.common.tf_util import get_session
-from baselines.deepq.models import build_q_func
-
-from forkan.models import VAE
-from forkan.common.utils import log_alg
-from forkan.common.csv_logger import CSVLogger
-
-
-from tqdm import tqdm
 
 
 class ActWrapper(object):
@@ -206,7 +200,7 @@ def learn(env,
 
     set_global_seeds(seed)
 
-    savepath, env_id_lower = log_alg('a2c', env_id, locals(), vae, save=save)
+    savepath, env_id_lower = log_alg('dqn', env_id, locals(), vae, save=save)
 
     csv_header = ['timestamp', "nepisodes", "total_timesteps", "fps", "mean_reward [20]"]
     csv = CSVLogger('{}progress.csv'.format(savepath), *csv_header)
@@ -366,15 +360,14 @@ def learn(env,
                 logger.record_tabular("% time spent exploring", int(100 * exploration.value(t)))
                 logger.dump_tabular()
 
-            if (checkpoint_freq is not None and t > learning_starts and
-                    num_episodes > 100 and t % checkpoint_freq == 0):
-                if saved_mean_reward is None or mean_20ep_reward > saved_mean_reward:
-                    if print_freq is not None:
-                        logger.log("Saving model due to mean reward increase: {} -> {}".format(
-                                   saved_mean_reward, mean_20ep_reward))
-                    save_variables(savepath)
-                    model_saved = True
-                    saved_mean_reward = mean_20ep_reward
+            if saved_mean_reward is None or mean_20ep_reward > saved_mean_reward:
+                if print_freq is not None:
+                    logger.log("Saving model due to mean reward increase: {} -> {}".format(
+                               saved_mean_reward, mean_20ep_reward))
+                save_variables(f'{savepath}/best')
+                model_saved = True
+                saved_mean_reward = mean_20ep_reward
+
         if model_saved:
             if print_freq is not None:
                 logger.log("Restored model with mean reward: {}".format(saved_mean_reward))
