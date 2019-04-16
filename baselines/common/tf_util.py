@@ -1,11 +1,13 @@
+import collections
+import copy
+import functools
+import multiprocessing
+import os
+
 import joblib
 import numpy as np
 import tensorflow as tf  # pylint: ignore-module
-import copy
-import os
-import functools
-import collections
-import multiprocessing
+
 
 def switch(condition, then_expression, else_expression):
     """Switches between two operations depending on a scalar value (int or bool).
@@ -398,15 +400,19 @@ def adjust_shape(placeholder, data):
 def _check_shape(placeholder_shape, data_shape):
     ''' check if two shapes are compatible (i.e. differ only by dimensions of size 1, or by the batch dimension)'''
 
-    squeezed_placeholder_shape = _squeeze_shape(placeholder_shape)
-    squeezed_data_shape = _squeeze_shape(data_shape)
+    squeezed_placeholder_shape = _squeeze_shape_with_batch_dim(placeholder_shape)
+    squeezed_data_shape = _squeeze_shape_with_batch_dim(data_shape)
 
     for i, s_data in enumerate(squeezed_data_shape):
         s_placeholder = squeezed_placeholder_shape[i]
-        if s_placeholder != -1 and s_data != s_placeholder:
+        if s_data != s_placeholder:
             return False
 
     return True
+
+
+def _squeeze_shape_with_batch_dim(shape):
+    return [x for x in shape if x != 1 and x != -1]
 
 
 def _squeeze_shape(shape):
