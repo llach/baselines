@@ -169,7 +169,7 @@ def learn(*, network, env, total_timesteps, eval_env = None, seed=None, nsteps=2
     tfirststart = time.time()
 
     csv_header = ['timestamp', "nupdates", "total_timesteps", "fps", "policy_entropy", "value_loss", "policy_loss",
-                  "explained_variance", "mean_reward", "approx_kl", "clip_frac"]
+                  "explained_variance", "mean_reward", "approx_kl", "clip_frac", "stop"]
 
     if with_vae:
         csv_header +=['rec-loss', 'kl-loss'] + ['z{}-kl'.format(i) for i in range(model.vae.latent_dim)]
@@ -417,17 +417,18 @@ def learn(*, network, env, total_timesteps, eval_env = None, seed=None, nsteps=2
         if with_vae:
             csv.writeline(datetime.datetime.now().isoformat(), update, update * nbatch, fps, float(lossvals[2]),
                           float(lossvals[1]), float(lossvals[0]), float(ev),
-                          float(mrew), float(lossvals[-2]), float(lossvals[-1]),
+                          float(mrew), float(lossvals[-2]), float(lossvals[-1]), int(early_stop and stop),
                           re_l, kl_l, *kl_ls)
         else:
             csv.writeline(datetime.datetime.now().isoformat(), update, update * nbatch, fps, float(lossvals[2]),
                           float(lossvals[1]), float(lossvals[0]), float(ev), float(mrew),
-                          float(lossvals[-2]), float(lossvals[-1]),)
+                          float(lossvals[-2]), float(lossvals[-1]), int(early_stop and stop))
 
         if update % log_interval == 0 or update == 1:
             logger.logkv("serial_timesteps", update*nsteps)
             logger.logkv("nupdates", update)
             logger.logkv("total_timesteps", update*nbatch)
+            logger.logkv("stop", int(early_stop and stop))
             logger.logkv("fps", fps)
             logger.logkv("explained_variance", float(ev))
             logger.logkv('eprewmean', mrew)
