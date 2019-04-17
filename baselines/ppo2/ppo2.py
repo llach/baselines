@@ -334,7 +334,7 @@ def learn(*, network, env, total_timesteps, eval_env = None, seed=None, nsteps=2
                         stop = True
                         break
                 if early_stop and stop:
-                    print('KL contraint violated. omitting further iterations over current batch.')
+                    logger.log('KL contraint violated. omitting further iterations over current batch.')
                     break
         else: # recurrent version
             assert nenvs % nminibatches == 0
