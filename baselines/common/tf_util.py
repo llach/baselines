@@ -400,8 +400,12 @@ def adjust_shape(placeholder, data):
 def _check_shape(placeholder_shape, data_shape):
     ''' check if two shapes are compatible (i.e. differ only by dimensions of size 1, or by the batch dimension)'''
 
-    squeezed_placeholder_shape = _squeeze_shape_with_batch_dim(placeholder_shape)
-    squeezed_data_shape = _squeeze_shape_with_batch_dim(data_shape)
+    if placeholder_shape[0] == -1 or data_shape[0] == -1:
+        placeholder_shape = placeholder_shape[1:]
+        data_shape = data_shape[1:]
+
+    squeezed_placeholder_shape = _squeeze_shape(placeholder_shape)
+    squeezed_data_shape = _squeeze_shape(data_shape)
 
     for i, s_data in enumerate(squeezed_data_shape):
         s_placeholder = squeezed_placeholder_shape[i]
@@ -409,10 +413,6 @@ def _check_shape(placeholder_shape, data_shape):
             return False
 
     return True
-
-
-def _squeeze_shape_with_batch_dim(shape):
-    return [x for x in shape if x != 1 and x != -1]
 
 
 def _squeeze_shape(shape):
