@@ -333,7 +333,7 @@ def learn(*, network, env, total_timesteps, eval_env = None, seed=None, nsteps=2
                     if pi_kl > 1.5 * target_kl:
                         stop = True
                         break
-                if stop:
+                if early_stop and stop:
                     print('KL contraint violated. omitting further improvements.')
                     break
         else: # recurrent version
