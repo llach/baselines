@@ -407,8 +407,8 @@ def learn(*, network, env, total_timesteps, eval_env = None, seed=None, nsteps=2
                 summary = s.run(merged_, feed_dict=fd)
             else:
                 fd.update({
-                    ac_ph: np.expand_dims(actions, -1),
-                    ac_clip_ph: np.expand_dims(np.clip(actions, -2, 2), -1),
+                    ac_ph: np.reshape(actions, [-1, 1]),
+                    ac_clip_ph: np.reshape(np.clip(actions, -2, 2), [-1, 1]),
                 })
                 summary = s.run(merged_, feed_dict=fd)
 
