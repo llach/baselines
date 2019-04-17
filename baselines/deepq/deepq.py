@@ -268,7 +268,7 @@ def learn(env,
     update_target()
 
     episode_rewards = [0.0]
-    saved_mean_reward = None
+    saved_mean_reward = -np.infty
     obs = env.reset()
     reset = True
 
@@ -361,10 +361,11 @@ def learn(env,
                 logger.record_tabular("% time spent exploring", int(100 * exploration.value(t)))
                 logger.dump_tabular()
 
-            if saved_mean_reward is None or mean_20ep_reward > saved_mean_reward:
-                if print_freq is not None:
-                    logger.log("Saving model due to mean reward increase: {} -> {}".format(
-                               saved_mean_reward, mean_20ep_reward))
+            if (mean_20ep_reward > saved_mean_reward) and not \
+                np.any(np.isnan([mean_20ep_reward, saved_mean_reward])):
+
+                logger.log("Saving model due to mean reward increase: {} -> {}".format(
+                           saved_mean_reward, mean_20ep_reward))
                 save_variables(f'{savepath}/best')
                 model_saved = True
                 saved_mean_reward = mean_20ep_reward
