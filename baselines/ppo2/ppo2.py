@@ -330,11 +330,12 @@ def learn(*, network, env, total_timesteps, eval_env = None, seed=None, nsteps=2
                         res = model.train(lrnow, cliprangenow, *slices)
                         pi_kl = res[-2]
                         mblossvals.append(res)
-                    if pi_kl > 1.5 * target_kl:
+                    if (pi_kl > 1.5 * target_kl) and early_stop:
+                        logger.log('KL contraint violated.')
                         stop = True
                         break
                 if early_stop and stop:
-                    logger.log('KL contraint violated. omitting further iterations over current batch.')
+                    logger.log('omitting further iterations over current batch.')
                     break
         else: # recurrent version
             assert nenvs % nminibatches == 0
