@@ -319,7 +319,6 @@ def learn(*, network, env, total_timesteps, eval_env = None, seed=None, nsteps=2
 
         thold = get_flat()
 
-        stop = False
         if states is None or states == []: # nonrecurrent version
             # Index of each element of batch_size
             # Create the indices array
@@ -334,23 +333,13 @@ def learn(*, network, env, total_timesteps, eval_env = None, seed=None, nsteps=2
                     slices = (arr[mbinds] for arr in (obs, returns, masks, actions, values, neglogpacs))
                     if with_vae:
                         res, kl_losses, re_loss, kl_loss = model.train(lrnow, cliprangenow, *slices)
-                        pi_kl = res[-2]
                         mblossvals.append(res)
                         re_l.append(re_loss)
                         kl_l.append(kl_loss)
                         kl_ls.append(kl_losses)
                     else:
                         res = model.train(lrnow, cliprangenow, *slices)
-                        pi_kl = res[-2]
                         mblossvals.append(res)
-                    if (pi_kl > 1.5 * target_kl) and early_stop:
-                        logger.log(f'KL {pi_kl} violates constraint {1.5*target_kl} in step {start//nbatch_train}')
-                        stop = True
-                        break
-                if early_stop and stop:
-                    logger.log('omitting further iterations over current batch. resetting parameters.')
-                    set_from_flat(thold)
-                    break
         else: # recurrent version
             assert nenvs % nminibatches == 0
             envsperbatch = nenvs // nminibatches
@@ -380,6 +369,13 @@ def learn(*, network, env, total_timesteps, eval_env = None, seed=None, nsteps=2
         kl_l = np.mean(kl_l, axis=0)
         kl_ls = np.mean(kl_ls, axis=0)
         mrew = safemean([epinfo['r'] for epinfo in epinfobuf])
+
+        stop = False
+        if early_stop and (lossvals[-2] > 1.5 * target_kl):
+            logger.log(f'KL {lossvals[-2]} violates constraint {1.5 * target_kl}, resetting parameters ...')
+            set_from_flat(thold)
+            logger.log('done setting parameters')
+            stop = True
 
         if mrew > best_rew:
             logger.log(f'reward: {best_rew} -> {mrew}. saving model.')
