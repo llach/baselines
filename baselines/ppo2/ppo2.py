@@ -344,7 +344,7 @@ def learn(*, network, env, total_timesteps, eval_env = None, seed=None, nsteps=2
                         pi_kl = res[-2]
                         mblossvals.append(res)
                     if (pi_kl > 1.5 * target_kl) and early_stop:
-                        logger.log(f'KL {pi_kl} violates constraint {1.5*target_kl}.')
+                        logger.log(f'KL {pi_kl} violates constraint {1.5*target_kl} in step {start//nbatch_train}')
                         stop = True
                         break
                 if early_stop and stop:
