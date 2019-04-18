@@ -7,6 +7,7 @@ from forkan.common.csv_logger import CSVLogger
 from forkan.common.tf_utils import scalar_summary
 from forkan.common.utils import log_alg
 
+import baselines.common.tf_util as U
 from baselines import logger
 from baselines.common import explained_variance, set_global_seeds, colorize
 from baselines.common.policies import build_policy
@@ -272,6 +273,11 @@ def learn(*, network, env, total_timesteps, eval_env = None, seed=None, nsteps=2
 
         merged_ = tf.summary.merge_all()
 
+    var_list = tf.trainable_variables()
+
+    get_flat = U.GetFlat(var_list)
+    set_from_flat = U.SetFromFlat(var_list)
+
     best_rew = -np.inf
     print('strarting main loop ...')
     nupdates = total_timesteps//nbatch
@@ -310,6 +316,8 @@ def learn(*, network, env, total_timesteps, eval_env = None, seed=None, nsteps=2
         re_l = []
         kl_l = []
         kl_ls = []
+
+        thold = get_flat()
 
         stop = False
         if states is None or states == []: # nonrecurrent version
