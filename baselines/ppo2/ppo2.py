@@ -142,6 +142,9 @@ def learn(*, network, env, total_timesteps, eval_env = None, seed=None, nsteps=2
                       max_grad_norm=max_grad_norm)
         if load_path is not None:
             model.load(load_path)
+            print(model)
+            if play:
+                return model
         # Instantiate the runner object
         runner = Runner(env=env, model=model, nsteps=nsteps, gamma=gamma, lam=lam)
         if eval_env is not None:
@@ -155,6 +158,8 @@ def learn(*, network, env, total_timesteps, eval_env = None, seed=None, nsteps=2
                          max_grad_norm=max_grad_norm, with_kl=with_kl, rl_coef=rl_coef, v_net=v_net)
         if load_path is not None:
             model.load(load_path)
+            if play:
+                return model
         # Instantiate the runner object
         runner = VAERunner(env=env, model=model, nsteps=nsteps, gamma=gamma, lam=lam)
 
