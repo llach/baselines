@@ -191,7 +191,7 @@ def parse_cmdline_kwargs(args):
 
 
 
-def main(args, build_fn=None, vae_params=None):
+def main(args, build_fn=None, vae_params=None, just_return=False):
     # configure logger, disable logging in child MPI processes (with rank > 0)
 
     arg_parser = common_arg_parser()
@@ -210,6 +210,9 @@ def main(args, build_fn=None, vae_params=None):
 
     model, env = train(args, extra_args, build_env_fn=build_fn or build_env, vae_params=vae_params)
     env.close()
+
+    if just_return:
+        return model, env
 
     if args.play:
         logger.log("Running trained model")
