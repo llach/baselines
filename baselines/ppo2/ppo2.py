@@ -407,8 +407,8 @@ def learn(*, network, env, total_timesteps, eval_env = None, seed=None, nsteps=2
 
             if with_vae:
                 fd.update({
-                    ac_ph: actions,
-                    ac_clip_ph: np.clip(actions, -2, 2),
+                    ac_ph: np.reshape(actions, [-1, 1]),
+                    ac_clip_ph: np.reshape(np.clip(actions, -2, 2), [-1, 1]),
                     rel_ph: re_l,
                     kll_ph: kl_l,
                 })
