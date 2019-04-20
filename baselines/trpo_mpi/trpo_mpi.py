@@ -1,21 +1,22 @@
-from baselines.common import explained_variance, zipsame, dataset
-from baselines import logger
-import baselines.common.tf_util as U
-import tensorflow as tf, numpy as np
+import datetime
 import time
-from baselines.common import colorize
 from collections import deque
-from baselines.common import set_global_seeds
-from baselines.common.mpi_adam import MpiAdam
-from baselines.common.cg import cg
-from baselines.common.input import observation_placeholder
-from baselines.common.policies import build_policy
 from contextlib import contextmanager
 
-from forkan.common.utils import log_alg
+import numpy as np
+import tensorflow as tf
 from forkan.common.csv_logger import CSVLogger
+from forkan.common.utils import log_alg
 
-import datetime
+import baselines.common.tf_util as U
+from baselines import logger
+from baselines.common import colorize
+from baselines.common import explained_variance, zipsame, dataset
+from baselines.common import set_global_seeds
+from baselines.common.cg import cg
+from baselines.common.input import observation_placeholder
+from baselines.common.mpi_adam import MpiAdam
+from baselines.common.policies import build_policy
 
 try:
     from mpi4py import MPI
@@ -111,6 +112,9 @@ def learn(*,
         env_id='',
         play=False,
         save=True,
+        vae_params=None,
+        k=None,
+        tensorboard=False,
         **network_kwargs
         ):
     '''
