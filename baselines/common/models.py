@@ -1,9 +1,10 @@
 import numpy as np
 import tensorflow as tf
+import tensorflow.contrib.layers as layers
+
 from baselines.a2c import utils
 from baselines.a2c.utils import conv, fc, conv_to_fc, batch_to_seq, seq_to_batch
 from baselines.common.mpi_running_mean_std import RunningMeanStd
-import tensorflow.contrib.layers as layers
 
 mapping = {}
 
@@ -97,6 +98,35 @@ def cnn(**conv_kwargs):
         return nature_cnn(X, **conv_kwargs)
     return network_fn
 
+
+@register("cnn_pend")
+def cnn_pend(**conv_kwargs):
+    def cnn_pend_fn(scaled_images, **conv_kwargs):
+        """
+        VAE CNN for pendulum env.
+        """
+
+        latent_dim = 5
+        hiddens = 256
+        encoder_conf = zip([32, 32, 64, 64],  # num filter
+                           [4] * 4,  # kernel size
+                           [(2, 2)] * 4)  # strides
+
+        x = scaled_images
+        with tf.variable_scope('cnn-pend'):
+            for n, (filters, kernel_size, stride) in enumerate(encoder_conf):
+                x = tf.contrib.layers.conv2d(inputs=x,
+                                             num_outputs=filters,
+                                             kernel_size=kernel_size,
+                                             stride=stride,
+                                             activation_fn=tf.nn.relu)
+            flat_encoder = tf.layers.flatten(x)
+            fc = tf.contrib.layers.fully_connected(flat_encoder, hiddens, activation_fn=tf.nn.relu)
+            u = tf.contrib.layers.fully_connected(fc, latent_dim, activation_fn=None)
+
+        return mlp()(u)
+
+    return cnn_pend_fn
 
 @register("cnn_small")
 def cnn_small(**conv_kwargs):
