@@ -122,7 +122,7 @@ def cnn_pend(**conv_kwargs):
                                              activation_fn=tf.nn.relu)
             flat_encoder = tf.layers.flatten(x)
             fc = tf.contrib.layers.fully_connected(flat_encoder, hiddens, activation_fn=tf.nn.relu)
-            u = tf.contrib.layers.fully_connected(fc, latent_dim, activation_fn=None)
+            u = tf.contrib.layers.fully_connected(fc, latent_dim, activation_fn=tf.nn.tanh)
 
         return mlp()(u)
 
