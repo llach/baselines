@@ -156,7 +156,7 @@ def learn(*, network, env, total_timesteps, eval_env = None, seed=None, nsteps=2
         from baselines.ppo2.vae_runner import VAERunner
 
         model = VAEModel(k=k, policy=policy, ob_space=ob_space, ac_space=ac_space, nbatch_act=nenvs, nbatch_train=nbatch_train,
-                         nsteps=nsteps, ent_coef=ent_coef, vf_coef=vf_coef, pg_coef=pg_coef, savepath=savepath, env=env,vae_params=vae_params,
+                         nsteps=nsteps, ent_coef=ent_coef, vf_coef=vf_coef, pg_coef=pg_coef, savepath=load_path or savepath, env=env,vae_params=vae_params,
                          max_grad_norm=max_grad_norm, with_kl=with_kl, rl_coef=rl_coef, v_net=v_net)
         if load_path is not None:
             model.load(load_path)
