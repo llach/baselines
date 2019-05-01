@@ -180,6 +180,20 @@ class VAEModel(object):
 
         return am.sess.run([am.action, am.vf, am.state, am.neglogp], feed_dict=feed_dict)
 
+    def step_xhat(self, obs, **extra_feed):
+        obs = np.expand_dims(np.moveaxis(obs, -1, 1), -1)
+        feed_dict = {self.vae.X: obs}
+        am = self.act_model
+
+        # add additional data to feed dict
+        for inpt_name, data in extra_feed.items():
+            if inpt_name in am.__dict__.keys():
+                inpt = am.__dict__[inpt_name]
+                if isinstance(inpt, tf.Tensor) and inpt._op.type == 'Placeholder':
+                    feed_dict[inpt] = am.adjust_shape(inpt, data)
+
+        return am.sess.run([am.action, self.vae.Xhat], feed_dict=feed_dict)
+
     def save(self, savepath):
         print('saving model ... ')
         save_variables(f'{savepath}/model', tf.trainable_variables('ppo2_model'), sess=self.sess)
