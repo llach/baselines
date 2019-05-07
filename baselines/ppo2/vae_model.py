@@ -192,7 +192,7 @@ class VAEModel(object):
                 if isinstance(inpt, tf.Tensor) and inpt._op.type == 'Placeholder':
                     feed_dict[inpt] = am.adjust_shape(inpt, data)
 
-        return am.sess.run([am.action, self.vae.Xhat], feed_dict=feed_dict)
+        return am.sess.run([am.action, self.vae.Xhat], feed_dict=feed_dict), obs
 
     def save(self, savepath):
         print('saving model ... ')
