@@ -116,8 +116,15 @@ def learn(*, network, env, total_timesteps, eval_env = None, seed=None, nsteps=2
         with_vae = False
         with_kl = False
         rl_coef = None
+        scaled_v = True
     else:
         with_vae = True
+
+        if 'scaled_re_loss' in vae_params:
+            scaled_v = vae_params['scaled_re_loss']
+        else:
+            scaled_v = True
+
         if 'init_from' in vae_params:
             models = 'retrain-' + vae_params['init_from'].split('lat')[0][:-1].split('-')[-1]
         else:
@@ -134,7 +141,7 @@ def learn(*, network, env, total_timesteps, eval_env = None, seed=None, nsteps=2
 
     savepath, env_id_lower = log_alg('ppo2', env_id, locals(), vae, num_envs=env.num_envs, save=save, lr=lr, k=k,
                                      seed=seed, model=models, with_kl=with_kl, rl_coef=rl_coef, early_stop=early_stop,
-                                     target_kl=target_kl)
+                                     target_kl=target_kl, scaled_re_loss=scaled_v)
 
     # Instantiate the model object (that creates act_model and train_model)
     if vae_params is None:
