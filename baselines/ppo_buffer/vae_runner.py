@@ -31,7 +31,7 @@ class VAERunner(AbstractEnvRunner):
             mb_obs.append(self.obs.copy())
             mb_actions.append(actions)
             mb_values.append(values)
-            mb_reclosses.append(np.mean(recl))
+            mb_reclosses.append(np.mean(recl, axis=-1))
             mb_neglogpacs.append(neglogpacs)
             mb_dones.append(self.dones)
 
@@ -42,12 +42,13 @@ class VAERunner(AbstractEnvRunner):
                 maybeepinfo = info.get('episode')
                 if maybeepinfo: epinfos.append(maybeepinfo)
             mb_rewards.append(rewards)
+
         #batch of steps to batch of rollouts
         mb_obs = np.asarray(mb_obs, dtype=self.obs.dtype)
         mb_rewards = np.asarray(mb_rewards, dtype=np.float32)
         mb_actions = np.asarray(mb_actions)
         mb_values = np.asarray(mb_values, dtype=np.float32)
-        mb_reclosses = np.expand_dims(np.asarray(mb_reclosses, dtype=np.float32), axis=-1)
+        mb_reclosses = np.asarray(mb_reclosses, dtype=np.float32)
         mb_neglogpacs = np.asarray(mb_neglogpacs, dtype=np.float32)
         mb_dones = np.asarray(mb_dones, dtype=np.bool)
         last_values = self.model.value(self.obs, S=self.states, M=self.dones)
