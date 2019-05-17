@@ -29,6 +29,7 @@ def learn(*, network, env, total_timesteps, eval_env = None, seed=None, nsteps=2
           vf_coef=0.5, pg_coef=1.0, max_grad_norm=0.5, gamma=0.99, lam=0.95, rl_coef=1.0, v_net='pendulum', f16=False,
           log_interval=10, nminibatches=4, noptepochs=4, cliprange=0.2, vae_params=None, log_weights=False, early_stop=False,
           save_interval=50, load_path=None, model_fn=None, env_id=None, play=False, save=True, tensorboard=False, k=None,
+          vae_buffer_size=1e4, collect_until=2e3, vae_batch_size=128, vae_batches_per_epoch=10,
           **network_kwargs):
     '''
     Learn policy using PPO algorithm (https://arxiv.org/abs/1707.06347)
@@ -120,6 +121,7 @@ def learn(*, network, env, total_timesteps, eval_env = None, seed=None, nsteps=2
     # Instantiate the model object (that creates act_model and train_model)
     from baselines.ppo_buffer.vae_model import VAEModel
     from baselines.ppo_buffer.vae_runner import VAERunner
+    from baselines.ppo_buffer.vae_buffer import VAEBuffer
 
     model = VAEModel(k=k, policy=policy, ob_space=ob_space, ac_space=ac_space, nbatch_act=nenvs, nbatch_train=nbatch_train,
                      nsteps=nsteps, ent_coef=ent_coef, vf_coef=vf_coef, pg_coef=pg_coef, savepath=load_path or savepath, env=env,vae_params=vae_params,
@@ -132,6 +134,9 @@ def learn(*, network, env, total_timesteps, eval_env = None, seed=None, nsteps=2
 
     # Instantiate the runner object
     runner = VAERunner(env=env, model=model, nsteps=nsteps, gamma=gamma, lam=lam)
+
+    # create vae buffer
+    vbuf = VAEBuffer(size=int(vae_buffer_size))
 
     epinfobuf = deque(maxlen=100)
     if eval_env is not None:
@@ -148,6 +153,8 @@ def learn(*, network, env, total_timesteps, eval_env = None, seed=None, nsteps=2
 
     buf = []
     t = 0
+    yu = False
+
     if tensorboard:
         import tensorflow as tf
         print('logging to tensorboard')
@@ -234,6 +241,9 @@ def learn(*, network, env, total_timesteps, eval_env = None, seed=None, nsteps=2
         # Get minibatch
         obs, returns, masks, actions, values, neglogpacs, reclosses, states, epinfos = runner.run() #pylint: disable=E0632
 
+        # add current batch to vae buffer. filtering happens inside the add function
+        vbuf.add(obs, returns, actions, values, neglogpacs, reclosses)
+
         """ This is for observation debugging. Uncomment with caution. """
         # import matplotlib.pyplot as plt
         # print(obs.shape)
@@ -258,24 +268,50 @@ def learn(*, network, env, total_timesteps, eval_env = None, seed=None, nsteps=2
 
         assert states is None or states == [], 'recurrent architectures not supported'
 
-        # Index of each element of batch_size
-        # Create the indices array
-        inds = np.arange(nbatch)
-        for _ in range(noptepochs):
-            # Randomize the indexes
-            np.random.shuffle(inds)
-            # 0 to batch_size with batch_train_size step
-            for start in range(0, nbatch, nbatch_train):
-                end = start + nbatch_train
-                mbinds = inds[start:end]
-                print(mbinds)
-                slices = (arr[mbinds] for arr in (obs, returns, actions, values, neglogpacs))
-                print(lrnow, cliprangenow)
-                res, kl_losses, re_loss, kl_loss = model.train_ppo(lrnow, cliprangenow, *slices)
-                mblossvals.append(res)
+        if update*nbatch < collect_until:
+            # Index of each element of batch_size
+            # Create the indices array
+            inds = np.arange(nbatch)
+            for _ in range(noptepochs):
+                # Randomize the indexes
+                np.random.shuffle(inds)
+                # 0 to batch_size with batch_train_size step
+                for start in range(0, nbatch, nbatch_train):
+                    end = start + nbatch_train
+                    mbinds = inds[start:end]
+                    slices = (arr[mbinds] for arr in (obs, returns, actions, values, neglogpacs))
+                    res, kl_losses, re_loss, kl_loss = model.train_full(lrnow, cliprangenow, *slices)
+                    mblossvals.append(res)
+                    re_l.append(re_loss)
+                    kl_l.append(kl_loss)
+                    kl_ls.append(kl_losses)
+        else:
+            if not yu:
+                print('separate training starts now!')
+                yu = True
+
+            for _ in range(vae_batches_per_epoch):
+                # sample batch and train on vae
+                v_obs, v_returns, v_actions, v_values, v_neglogpacs = vbuf.sample(vae_batch_size)
+                _, kl_losses, re_loss, kl_loss = model.train_vae(lrnow, cliprangenow, v_obs, v_returns, v_actions,
+                                                                 v_values, v_neglogpacs)
                 re_l.append(re_loss)
                 kl_l.append(kl_loss)
                 kl_ls.append(kl_losses)
+
+            # Index of each element of batch_size
+            # Create the indices array
+            inds = np.arange(nbatch)
+            for _ in range(noptepochs):
+                # Randomize the indexes
+                np.random.shuffle(inds)
+                # 0 to batch_size with batch_train_size step
+                for start in range(0, nbatch, nbatch_train):
+                    end = start + nbatch_train
+                    mbinds = inds[start:end]
+                    slices = (arr[mbinds] for arr in (obs, returns, actions, values, neglogpacs))
+                    res, _, _, _ = model.train_ppo(lrnow, cliprangenow, *slices)
+                    mblossvals.append(res)
 
         # Feedforward --> get losses --> update
         lossvals = np.mean(mblossvals, axis=0)
