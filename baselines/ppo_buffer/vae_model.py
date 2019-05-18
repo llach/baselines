@@ -130,10 +130,11 @@ class VAEModel(object):
         ppo_grads_and_var = _filter_gv('ppo')
         vae_grads_and_var = _filter_gv('vae')
 
-        for gv in [ppo_grads_and_var, vae_grads_and_var, grads_and_var]:
-            for g, v in gv:
-                print(f'G {g} ::: V {v}')
-            print('****************************')
+        # print weights
+        # for gv in [ppo_grads_and_var, vae_grads_and_var, grads_and_var]:
+        #     for g, v in gv:
+        #         print(f'G {g} ::: V {v}')
+        #     print('****************************')
 
         self._ppo_train_op = self.trainer.apply_gradients(ppo_grads_and_var)
         self._vae_train_op = self.trainer.apply_gradients(vae_grads_and_var)
