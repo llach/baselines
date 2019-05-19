@@ -310,7 +310,7 @@ def learn(*, network, env, total_timesteps, eval_env = None, seed=None, nsteps=2
                     end = start + nbatch_train
                     mbinds = inds[start:end]
                     slices = (arr[mbinds] for arr in (obs, returns, actions, values, neglogpacs))
-                    res, _, _, _ = model.train_ppo(lrnow, cliprangenow, *slices)
+                    res, _, _, _ = model.train_full(lrnow, cliprangenow, *slices)
                     mblossvals.append(res)
 
         # Feedforward --> get losses --> update
