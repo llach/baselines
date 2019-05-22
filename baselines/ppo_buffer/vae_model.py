@@ -109,9 +109,11 @@ class VAEModel(object):
         params = tf.trainable_variables()
 
         # 2. Build our trainer
-        self.trainer = tf.train.AdamOptimizer(learning_rate=LR, epsilon=1e-5)
+        self.trainer_full = tf.train.AdamOptimizer(learning_rate=LR, epsilon=1e-5, name='adam_full')
+        self.trainer_vae = tf.train.AdamOptimizer(learning_rate=0.001, name='adam_vae')
+
         # 3. Calculate the gradients
-        grads_and_var = self.trainer.compute_gradients(joint_loss, params)
+        grads_and_var = self.trainer_full.compute_gradients(joint_loss, params)
         grads, var = zip(*grads_and_var)
 
         if max_grad_norm is not None:
@@ -136,9 +138,9 @@ class VAEModel(object):
         #         print(f'G {g} ::: V {v}')
         #     print('****************************')
 
-        self._ppo_train_op = self.trainer.apply_gradients(ppo_grads_and_var)
-        self._vae_train_op = self.trainer.apply_gradients(vae_grads_and_var)
-        self._full_train_op = self.trainer.apply_gradients(grads_and_var)
+        self._vae_train_op = self.trainer_vae.apply_gradients(vae_grads_and_var)
+        self._ppo_train_op = self.trainer_full.apply_gradients(ppo_grads_and_var)
+        self._full_train_op = self.trainer_full.apply_gradients(grads_and_var)
 
         self.loss_names = ['policy_loss', 'value_loss', 'policy_entropy', 'approxkl', 'clipfrac']
         self.stats_list = [pg_loss, vf_loss, entropy, approxkl, clipfrac]
