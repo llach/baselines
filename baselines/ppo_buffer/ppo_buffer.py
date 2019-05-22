@@ -182,8 +182,11 @@ def learn(*, network, env, total_timesteps, eval_env = None, seed=None, nsteps=2
         scalar_summary('stopped', stop_ph, scope='stopping')
 
         rew_ph = tf.placeholder(tf.bfloat16, (), name='reward')
+        lr_ph = tf.placeholder(tf.bfloat16, (), name='lr')
         ac_ph = tf.placeholder(tf.bfloat16, (nbatch, 1), name='actions')
         ac_clip_ph = tf.placeholder(tf.bfloat16, (nbatch, 1), name='actions-clipped')
+
+        scalar_summary('learning_rate', lr_ph)
 
         tf.summary.histogram('actions-hist', ac_ph)
         tf.summary.histogram('actions-hist-clipped', ac_clip_ph)
@@ -220,6 +223,9 @@ def learn(*, network, env, total_timesteps, eval_env = None, seed=None, nsteps=2
             scalar_summary(f'z{i}-kl', klls_ph[i], scope='z-kl')
 
         merged_ = tf.summary.merge_all()
+
+        img_ph = tf.placeholder(tf.float32, shape=(5,) + tuple(np.multiply(ob_space.shape[:-1], [1, 2])) + (1,))
+        im_sum = tf.summary.image('images', img_ph, max_outputs=5)
 
     var_list = tf.trainable_variables()
 
@@ -352,6 +358,7 @@ def learn(*, network, env, total_timesteps, eval_env = None, seed=None, nsteps=2
                 ak_ph: lossvals[-2],
                 cf_ph: lossvals[-1],
                 stop_ph: int(stop),
+                lr_ph: lrnow,
                 rew_ph: mrew,
             }
 
@@ -375,6 +382,18 @@ def learn(*, network, env, total_timesteps, eval_env = None, seed=None, nsteps=2
                       re_l, kl_l, *kl_ls)
 
         if update % log_interval == 0 or update == 1:
+
+            sampled_obs, _, _, _, _ = vbuf.sample(5)
+            sampled_obs = np.expand_dims(np.moveaxis(sampled_obs, -1, 1), -1)
+            reconstructions = model.vae.reconstruct_stacked(sampled_obs)
+
+            shw = []
+            for l in range(sampled_obs.shape[0]):
+                shw.append(np.concatenate((sampled_obs[l, 0, ...], reconstructions[l, ...]), axis=1))
+
+            im_sum_eval = s.run(im_sum, feed_dict={img_ph: shw})
+            fw.add_summary(im_sum_eval, update*nbatch)
+
             logger.logkv("serial_timesteps", update*nsteps)
             logger.logkv("nupdates", update)
             logger.logkv("total_timesteps", update*nbatch)
@@ -391,6 +410,7 @@ def learn(*, network, env, total_timesteps, eval_env = None, seed=None, nsteps=2
 
             perc = ((update * nbatch) / total_timesteps) * 100
             steps2go = total_timesteps - (update * nbatch)
+            fps = max(fps, 1)
             secs2go = steps2go / fps
             min2go = secs2go / 60
 
