@@ -219,7 +219,7 @@ class VAEModel(object):
 
     def train(self, lr, cliprange, obs, returns, actions, values, neglogpacs, typ=''):
         obs = np.expand_dims(np.moveaxis(obs, -1, 1), -1)
-        assert np.max(obs) > 1, 'observations need to be normalized!'
+        assert np.max(obs) <= 1, 'observations need to be normalized!'
 
         # Here we calculate advantage A(s,a) = R + yV(s') - V(s)
         # Returns = R + yV(s')
