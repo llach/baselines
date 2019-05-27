@@ -389,9 +389,14 @@ def learn(*, network, env, total_timesteps, eval_env = None, seed=None, nsteps=2
 
             shw = []
             for l in range(sampled_obs.shape[0]):
-                shw.append(np.concatenate((sampled_obs[l, 0, ...], reconstructions[l, ...]), axis=1))
 
-            im_sum_eval = s.run(im_sum, feed_dict={img_ph: shw})
+                samo = np.squeeze(sampled_obs[l, 0, ...]).copy()
+                reco = np.asarray(np.squeeze(reconstructions[l, ...]).copy(), dtype=np.float32)
+                cano = np.concatenate((samo, reco), axis=1)
+
+                shw.append(cano)
+
+            im_sum_eval = s.run(im_sum, feed_dict={img_ph: np.expand_dims(shw, axis=-1)})
             fw.add_summary(im_sum_eval, update*nbatch)
 
             logger.logkv("serial_timesteps", update*nsteps)
