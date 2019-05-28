@@ -29,7 +29,7 @@ def learn(*, network, env, total_timesteps, eval_env = None, seed=None, nsteps=2
           vf_coef=0.5, pg_coef=1.0, max_grad_norm=0.5, gamma=0.99, lam=0.95, rl_coef=1.0, v_net='pendulum', f16=False,
           log_interval=10, nminibatches=4, noptepochs=4, cliprange=0.2, vae_params=None, log_weights=False, early_stop=False,
           save_interval=50, load_path=None, model_fn=None, env_id=None, play=False, save=True, tensorboard=False, k=None,
-          vae_buffer_size=1e4, collect_until=2e3, vae_batch_size=128, vae_batches_per_epoch=10,
+          vae_buffer_size=1e4, collect_until=2e3, vae_batch_size=128, vae_batches_per_epoch=10, train_vae_every=None,
           **network_kwargs):
     '''
     Learn policy using PPO algorithm (https://arxiv.org/abs/1707.06347)
@@ -296,14 +296,19 @@ def learn(*, network, env, total_timesteps, eval_env = None, seed=None, nsteps=2
                 print('separate training starts now!')
                 yu = True
 
-            for _ in range(vae_batches_per_epoch):
-                # sample batch and train on vae
-                v_obs, v_returns, v_actions, v_values, v_neglogpacs = vbuf.sample(vae_batch_size)
-                _, kl_losses, re_loss, kl_loss = model.train_vae(lrnow, cliprangenow, v_obs, v_returns, v_actions,
-                                                                 v_values, v_neglogpacs)
-                re_l.append(re_loss)
-                kl_l.append(kl_loss)
-                kl_ls.append(kl_losses)
+            if train_vae_every is None:
+                for _ in range(vae_batches_per_epoch):
+                    # sample batch and train on vae
+                    v_obs, v_returns, v_actions, v_values, v_neglogpacs = vbuf.sample(vae_batch_size)
+                    _, kl_losses, re_loss, kl_loss = model.train_vae(lrnow, cliprangenow, v_obs, v_returns, v_actions,
+                                                                     v_values, v_neglogpacs)
+                    re_l.append(re_loss)
+                    kl_l.append(kl_loss)
+                    kl_ls.append(kl_losses)
+
+            else:
+                # todo call retVAE train on buffer, maybe new statistics phs
+                pass
 
             # Index of each element of batch_size
             # Create the indices array
@@ -316,6 +321,7 @@ def learn(*, network, env, total_timesteps, eval_env = None, seed=None, nsteps=2
                     end = start + nbatch_train
                     mbinds = inds[start:end]
                     slices = (arr[mbinds] for arr in (obs, returns, actions, values, neglogpacs))
+                    # todo if train_vae_every -> get statistics also from here
                     res, _, _, _ = model.train_full(lrnow, cliprangenow, *slices)
                     mblossvals.append(res)
 
