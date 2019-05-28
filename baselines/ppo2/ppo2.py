@@ -281,6 +281,9 @@ def learn(*, network, env, total_timesteps, eval_env = None, seed=None, nsteps=2
 
         merged_ = tf.summary.merge_all()
 
+        img_ph = tf.placeholder(tf.float32, shape=(5,) + tuple(np.multiply(ob_space.shape[:-1], [1, 2])) + (1,))
+        im_sum = tf.summary.image('images', img_ph, max_outputs=5)
+
     var_list = tf.trainable_variables()
 
     get_flat = U.GetFlat(var_list)
@@ -444,6 +447,22 @@ def learn(*, network, env, total_timesteps, eval_env = None, seed=None, nsteps=2
                           float(lossvals[-2]), float(lossvals[-1]), int(early_stop and stop))
 
         if update % log_interval == 0 or update == 1:
+
+            sampled_obs = obs[np.random.choice(nbatch, 5)]
+
+            sampled_obs = np.expand_dims(np.moveaxis(sampled_obs, -1, 1), -1)
+            reconstructions = model.vae.reconstruct_stacked(sampled_obs)
+            shw = []
+            for l in range(sampled_obs.shape[0]):
+                samo = np.squeeze(sampled_obs[l, 0, ...]).copy()
+                reco = np.asarray(np.squeeze(reconstructions[l, ...]).copy(), dtype=np.float32)
+                cano = np.concatenate((samo, reco), axis=1)
+
+                shw.append(cano)
+
+            im_sum_eval = s.run(im_sum, feed_dict={img_ph: np.expand_dims(shw, axis=-1)})
+            fw.add_summary(im_sum_eval, update * nbatch)
+
             logger.logkv("serial_timesteps", update*nsteps)
             logger.logkv("nupdates", update)
             logger.logkv("total_timesteps", update*nbatch)
