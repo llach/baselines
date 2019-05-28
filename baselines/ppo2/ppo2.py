@@ -229,27 +229,28 @@ def learn(*, network, env, total_timesteps, eval_env = None, seed=None, nsteps=2
             cf_ph = tf.placeholder(tf.bfloat16, (), name='clipfrac')
             stop_ph = tf.placeholder(tf.uint8, (), name='stopped')
 
-
-        scalar_summary('approx-kl', ak_ph, scope='stopping')
-        scalar_summary('clipfrac', cf_ph, scope='stopping')
-        scalar_summary('stopped', stop_ph, scope='stopping')
-
         rew_ph = tf.placeholder(tf.bfloat16, (), name='reward')
         ac_ph = tf.placeholder(tf.bfloat16, (nbatch, 1), name='actions')
         ac_clip_ph = tf.placeholder(tf.bfloat16, (nbatch, 1), name='actions-clipped')
 
-        tf.summary.histogram('actions-hist', ac_ph)
-        tf.summary.histogram('actions-hist-clipped', ac_clip_ph)
+        sums = []
 
-        scalar_summary('reward', rew_ph)
+        sums.append(scalar_summary('approx-kl', ak_ph, scope='stopping'))
+        sums.append(scalar_summary('clipfrac', cf_ph, scope='stopping'))
+        sums.append(scalar_summary('stopped', stop_ph, scope='stopping'))
 
-        scalar_summary('value-loss', vl_ph, scope='rl-loss')
-        scalar_summary('policy-loss', pl_ph, scope='rl-loss')
-        scalar_summary('policy-entropy', pe_ph, scope='rl-loss')
+        sums.append(tf.summary.histogram('actions-hist', ac_ph))
+        sums.append(tf.summary.histogram('actions-hist-clipped', ac_clip_ph))
 
-        scalar_summary('value-loss-scaled', vl_scaled_ph, scope='scaled-rl-loss')
-        scalar_summary('policy-loss-scaled', pl_scaled_ph, scope='scaled-rl-loss')
-        scalar_summary('policy-entropy-scaled', pe_scaled_ph, scope='scaled-rl-loss')
+        sums.append(scalar_summary('reward', rew_ph))
+
+        sums.append(scalar_summary('value-loss', vl_ph, scope='rl-loss'))
+        sums.append(scalar_summary('policy-loss', pl_ph, scope='rl-loss'))
+        sums.append(scalar_summary('policy-entropy', pe_ph, scope='rl-loss'))
+
+        sums.append(scalar_summary('value-loss-scaled', vl_scaled_ph, scope='scaled-rl-loss'))
+        sums.append(scalar_summary('policy-loss-scaled', pl_scaled_ph, scope='scaled-rl-loss'))
+        sums.append(scalar_summary('policy-entropy-scaled', pe_scaled_ph, scope='scaled-rl-loss'))
 
         if log_weights:
             if with_vae:
@@ -258,18 +259,18 @@ def learn(*, network, env, total_timesteps, eval_env = None, seed=None, nsteps=2
 
                 with tf.variable_scope('policy-weights'):
                     for v in pvs:
-                        tf.summary.histogram('{}'.format(v.name), v)
+                        sums.append(tf.summary.histogram('{}'.format(v.name), v))
 
                 with tf.variable_scope('vae-weights'):
                     for v in vvs:
-                        tf.summary.histogram('{}'.format(v.name), v)
+                        sums.append(tf.summary.histogram('{}'.format(v.name), v))
 
             else:
                 pvs = tf.trainable_variables('ppo2_model')
 
                 with tf.variable_scope('policy-weights'):
                     for v in pvs:
-                        tf.summary.histogram('{}'.format(v.name), v)
+                        sums.append(tf.summary.histogram('{}'.format(v.name), v))
 
         if with_vae:
             rel_ph = tf.placeholder(tf.bfloat16, (), name='rec-loss')
@@ -281,7 +282,7 @@ def learn(*, network, env, total_timesteps, eval_env = None, seed=None, nsteps=2
             for i in range(model.vae.latent_dim):
                 scalar_summary(f'z{i}-kl', klls_ph[i], scope='z-kl')
 
-        merged_ = tf.summary.merge_all()
+        merged_ = tf.summary.merge(sums)
 
         img_ph = tf.placeholder(tf.float32, shape=(1,) + tuple(np.multiply(ob_space.shape[:-1], [5, 3])) + (1,))
         im_sum = tf.summary.image('images', img_ph, max_outputs=5)
@@ -345,7 +346,12 @@ def learn(*, network, env, total_timesteps, eval_env = None, seed=None, nsteps=2
                     mbinds = inds[start:end]
                     slices = (arr[mbinds] for arr in (obs, returns, masks, actions, values, neglogpacs))
                     if with_vae:
-                        res, kl_losses, re_loss, kl_loss = model.train(lrnow, cliprangenow, *slices)
+                        if _ == (noptepochs - 1):
+                            fw_for_model = fw
+                        else:
+                            fw_for_model = None
+                        res, kl_losses, re_loss, kl_loss = model.train(lrnow, cliprangenow, *slices,
+                                                                       fw=fw_for_model, sumstep=update*nbatch)
                         mblossvals.append(res)
                         re_l.append(re_loss)
                         kl_l.append(kl_loss)
@@ -368,6 +374,7 @@ def learn(*, network, env, total_timesteps, eval_env = None, seed=None, nsteps=2
                     slices = (arr[mbflatinds] for arr in (obs, returns, masks, actions, values, neglogpacs))
                     mbstates = states[mbenvinds]
                     if with_vae:
+
                         res, kl_losses, re_loss, kl_loss = model.train(lrnow, cliprangenow, *slices, mbstates)
                         mblossvals.append(res)
                         re_l.append(re_loss)
