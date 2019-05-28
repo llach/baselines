@@ -203,10 +203,12 @@ def learn(*, network, env, total_timesteps, eval_env = None, seed=None, nsteps=2
                 tf.add_to_collection('assignOps', var.assign(var))
         get_session().run(tf.get_collection('assignOps'))
 
+    import tensorflow as tf
+    vf_grad_op = tf.gradients(model.train_model.vf, model.vae.X)
+
     buf = []
     t = 0
     if tensorboard:
-        import tensorflow as tf
         print('logging to tensorboard')
         s = get_session()
         import os
@@ -281,7 +283,7 @@ def learn(*, network, env, total_timesteps, eval_env = None, seed=None, nsteps=2
 
         merged_ = tf.summary.merge_all()
 
-        img_ph = tf.placeholder(tf.float32, shape=(5,) + tuple(np.multiply(ob_space.shape[:-1], [1, 2])) + (1,))
+        img_ph = tf.placeholder(tf.float32, shape=(1,) + tuple(np.multiply(ob_space.shape[:-1], [5, 3])) + (1,))
         im_sum = tf.summary.image('images', img_ph, max_outputs=5)
 
     var_list = tf.trainable_variables()
@@ -447,20 +449,29 @@ def learn(*, network, env, total_timesteps, eval_env = None, seed=None, nsteps=2
                           float(lossvals[-2]), float(lossvals[-1]), int(early_stop and stop))
 
         if update % log_interval == 0 or update == 1:
-
             sampled_obs = obs[np.random.choice(nbatch, 5)]
 
             sampled_obs = np.expand_dims(np.moveaxis(sampled_obs, -1, 1), -1)
             reconstructions = model.vae.reconstruct_stacked(sampled_obs)
+
+            vf_grad = s.run(vf_grad_op, feed_dict={model.vae.X: sampled_obs})
+            vf_grad = np.squeeze(np.asarray(vf_grad, dtype=np.float32))[:, 0, ...].copy()
+
+            # scale gradients to [0,1]
+            vf_grad += np.abs(np.min(vf_grad))
+            vf_grad *= (1/(np.abs(np.min(vf_grad)) + np.max(vf_grad)))
+
             shw = []
             for l in range(sampled_obs.shape[0]):
-                samo = np.squeeze(sampled_obs[l, 0, ...]).copy()
-                reco = np.asarray(np.squeeze(reconstructions[l, ...]).copy(), dtype=np.float32)
-                cano = np.concatenate((samo, reco), axis=1)
+                samo = np.squeeze(sampled_obs[l, 0, ...])
+                reco = np.asarray(np.squeeze(reconstructions[l, ...]), dtype=np.float32)
+                cano = np.concatenate((samo, reco, vf_grad[l]), axis=1)
 
                 shw.append(cano)
 
-            im_sum_eval = s.run(im_sum, feed_dict={img_ph: np.expand_dims(shw, axis=-1)})
+            shw = np.concatenate(shw, axis=0)
+
+            im_sum_eval = s.run(im_sum, feed_dict={img_ph: np.expand_dims(np.expand_dims(shw, axis=-1), axis=0)})
             fw.add_summary(im_sum_eval, update * nbatch)
 
             logger.logkv("serial_timesteps", update*nsteps)
