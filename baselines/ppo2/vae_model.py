@@ -13,7 +13,7 @@ except ImportError:
 
 import numpy as np
 from forkan.models import RetrainVAE
-
+from forkan.common.tf_utils import scalar_summary
 
 class VAEModel(object):
     """
@@ -131,6 +131,26 @@ class VAEModel(object):
         # zip aggregate each gradient with parameters associated
         # For instance zip(ABCD, xyza) => Ax, By, Cz, Da
 
+        var_names_to_visualize = [
+            'vae/decoder/fully_connected/weights:0',
+            'vae/decoder/fully_connected/biases:0',
+            'ppo2_model/pi/mlp_fc0/w:0',
+            'ppo2_model/pi/mlp_fc0/b:0',
+            'vae/encoder/mus/fully_connected/weights:0',
+            'vae/encoder/mus/fully_connected/biases:0',
+        ]
+
+        self.vars_to_visualize = []
+        sums = []
+
+        for g,v in grads_and_var:
+            if v.name in var_names_to_visualize:
+                self.vars_to_visualize.append(g)
+                sums.append(tf.summary.histogram(v.name, g))
+                sums.append(scalar_summary(v.name.replace('_','/').replace(':', ''), tf.reduce_mean(g), scope='gradient-means'))
+
+        self.varsum = tf.summary.merge(sums)
+
         self.grads = grads
         self.var = var
         self._train_op = self.trainer.apply_gradients(grads_and_var)
@@ -204,7 +224,7 @@ class VAEModel(object):
         load_variables(f'{loadpath}/model', tf.trainable_variables('ppo2_model'), sess=self.sess)
         self.vae.load()
 
-    def train(self, lr, cliprange, obs, returns, masks, actions, values, neglogpacs, states=None):
+    def train(self, lr, cliprange, obs, returns, masks, actions, values, neglogpacs, states=None, fw=None, sumstep=None):
         obs = np.expand_dims(np.moveaxis(obs, -1, 1), -1)
         assert np.max(obs) <= 1, 'observations need to be normalized!'
 
@@ -229,10 +249,28 @@ class VAEModel(object):
             td_map[self.train_model.S] = states
             td_map[self.train_model.M] = masks
 
-        res = self.sess.run(
-            self.stats_list + [self.vae.re_loss, self.vae.kl_loss, self._train_op],
-            td_map
-        )[:-1]
+        if fw is None:
+            res = self.sess.run(
+                self.stats_list + [self.vae.re_loss, self.vae.kl_loss, self._train_op],
+                td_map
+            )[:-1]
+
+        else:
+            res = self.sess.run(
+                self.stats_list + [self.vae.re_loss, self.vae.kl_loss] + self.vars_to_visualize + [self._train_op],
+                td_map
+            )[:-1]
+
+            res, gvs = res[:-len(self.vars_to_visualize)], res[-len(self.vars_to_visualize):]
+            assert len(gvs) == len(self.vars_to_visualize)
+
+            grad_fd = {}
+            for n, var in enumerate(self.vars_to_visualize):
+                grad_fd.update({var: gvs[n]})
+
+            gvsum = self.sess.run(self.varsum, feed_dict=grad_fd)
+            fw.add_summary(gvsum, sumstep)
+
 
         kl_losses = res[-1]
         # mean losses
