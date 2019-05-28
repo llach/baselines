@@ -99,6 +99,36 @@ def cnn(**conv_kwargs):
     return network_fn
 
 
+@register("cnn_atari")
+def cnn_pend(**conv_kwargs):
+    def cnn_pend_fn(scaled_images, **conv_kwargs):
+        """
+        VAE CNN for pendulum env.
+        """
+
+        latent_dim = 20
+        hiddens = 512
+        encoder_conf = zip([32, 64],  # num filter
+                           [2, 2],  # kernel size
+                           [(2, 2), (2, 2)]) # strides
+
+        x = scaled_images
+        with tf.variable_scope('cnn-atari'):
+            for n, (filters, kernel_size, stride) in enumerate(encoder_conf):
+                x = tf.contrib.layers.conv2d(inputs=x,
+                                             num_outputs=filters,
+                                             kernel_size=kernel_size,
+                                             stride=stride,
+                                             activation_fn=tf.nn.relu)
+            flat_encoder = tf.layers.flatten(x)
+            fc = tf.contrib.layers.fully_connected(flat_encoder, hiddens, activation_fn=tf.nn.relu)
+            u = tf.contrib.layers.fully_connected(fc, latent_dim, activation_fn=tf.nn.tanh)
+
+        return mlp()(u)
+
+    return cnn_pend_fn
+
+
 @register("cnn_pend")
 def cnn_pend(**conv_kwargs):
     def cnn_pend_fn(scaled_images, **conv_kwargs):
