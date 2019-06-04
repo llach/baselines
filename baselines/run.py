@@ -209,10 +209,11 @@ def main(args, build_fn=None, vae_params=None, just_return=False):
         rank = MPI.COMM_WORLD.Get_rank()
 
     model, env = train(args, extra_args, build_env_fn=build_fn or build_env, vae_params=vae_params)
-    env.close()
 
     if just_return:
         return model, env
+
+    env.close()
 
     if args.play:
         logger.log("Running trained model")
