@@ -285,7 +285,7 @@ def learn(*, network, env, total_timesteps, eval_env = None, seed=None, nsteps=2
 
         merged_ = tf.summary.merge(sums)
 
-        img_ph = tf.placeholder(tf.float32, shape=(1,) + tuple(np.multiply(ob_space.shape[:-1], [5, 3])) + (1,))
+        img_ph = tf.placeholder(tf.float32, shape=(1,) + tuple(np.multiply(ob_space.shape[:-1], [5, 3])) + (3,))
         im_sum = tf.summary.image('images', img_ph, max_outputs=5)
 
     var_list = tf.trainable_variables()
@@ -472,15 +472,17 @@ def learn(*, network, env, total_timesteps, eval_env = None, seed=None, nsteps=2
 
                 shw = []
                 for l in range(sampled_obs.shape[0]):
-                    samo = np.squeeze(sampled_obs[l, 0, ...])
-                    reco = np.asarray(np.squeeze(reconstructions[l, ...]), dtype=np.float32)
-                    cano = np.concatenate((samo, reco, vf_grad[l]), axis=1)
+                    samo = np.repeat(sampled_obs[l, 0, ...], 3, axis=-1)
+                    reco = np.repeat(np.asarray(reconstructions[l, ...], dtype=np.float32), 3, axis=-1)
+                    lob = samo.copy()
+                    lob[..., -1] += np.where(vf_grad[l] > np.mean(vf_grad[l]) * 1.1, vf_grad[l], np.zeros_like(vf_grad[l]))
+                    cano = np.concatenate((samo, reco, lob), axis=1)
 
                     shw.append(cano)
 
                 shw = np.concatenate(shw, axis=0)
 
-                im_sum_eval = s.run(im_sum, feed_dict={img_ph: np.expand_dims(np.expand_dims(shw, axis=-1), axis=0)})
+                im_sum_eval = s.run(im_sum, feed_dict={img_ph: np.expand_dims(shw, axis=0)})
                 fw.add_summary(im_sum_eval, update * nbatch)
 
             logger.logkv("serial_timesteps", update*nsteps)
