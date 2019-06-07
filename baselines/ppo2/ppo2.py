@@ -29,7 +29,7 @@ def learn(*, network, env, total_timesteps, eval_env = None, seed=None, nsteps=2
           vf_coef=0.5, pg_coef=1.0, max_grad_norm=0.5, gamma=0.99, lam=0.95, rl_coef=1.0, v_net='pendulum', f16=False,
           log_interval=10, nminibatches=4, noptepochs=4, cliprange=0.2, vae_params=None, log_weights=False, early_stop=False,
           save_interval=50, load_path=None, model_fn=None, env_id=None, play=False, save=True, tensorboard=False, k=None,
-          **network_kwargs):
+          alpha=1.0, **network_kwargs):
     '''
     Learn policy using PPO algorithm (https://arxiv.org/abs/1707.06347)
 
@@ -141,7 +141,7 @@ def learn(*, network, env, total_timesteps, eval_env = None, seed=None, nsteps=2
 
     savepath, env_id_lower = log_alg('ppo2', env_id, locals(), vae, num_envs=env.num_envs, save=save, lr=lr, k=k,
                                      seed=seed, model=models, with_kl=with_kl, rl_coef=rl_coef, early_stop=early_stop,
-                                     target_kl=target_kl, scaled_re_loss=scaled_v)
+                                     target_kl=target_kl, scaled_re_loss=scaled_v, alpha=alpha)
 
     # Instantiate the model object (that creates act_model and train_model)
     if vae_params is None:
@@ -164,7 +164,7 @@ def learn(*, network, env, total_timesteps, eval_env = None, seed=None, nsteps=2
 
         model = VAEModel(k=k, policy=policy, ob_space=ob_space, ac_space=ac_space, nbatch_act=nenvs, nbatch_train=nbatch_train,
                          nsteps=nsteps, ent_coef=ent_coef, vf_coef=vf_coef, pg_coef=pg_coef, savepath=load_path or savepath, env=env,vae_params=vae_params,
-                         max_grad_norm=max_grad_norm, with_kl=with_kl, rl_coef=rl_coef, v_net=v_net)
+                         max_grad_norm=max_grad_norm, with_kl=with_kl, rl_coef=rl_coef, v_net=v_net, alpha=alpha)
         if load_path is not None:
             model.load(load_path)
             if play:
@@ -220,11 +220,6 @@ def learn(*, network, env, total_timesteps, eval_env = None, seed=None, nsteps=2
             pe_ph = tf.placeholder(tf.bfloat16, (), name='policy-entropy')
             vl_ph = tf.placeholder(tf.bfloat16, (), name='value-loss')
 
-        with tf.variable_scope('scaled-losses'):
-            pl_scaled_ph = tf.placeholder(tf.bfloat16, (), name='policy-loss-scaled')
-            pe_scaled_ph = tf.placeholder(tf.bfloat16, (), name='policy-entropy-scaled')
-            vl_scaled_ph = tf.placeholder(tf.bfloat16, (), name='value-loss-scaled')
-
         with tf.variable_scope('stopping'):
             ak_ph = tf.placeholder(tf.bfloat16, (), name='approx-kl')
             cf_ph = tf.placeholder(tf.bfloat16, (), name='clipfrac')
@@ -249,10 +244,6 @@ def learn(*, network, env, total_timesteps, eval_env = None, seed=None, nsteps=2
         sums.append(scalar_summary('policy-loss', pl_ph, scope='rl-loss'))
         sums.append(scalar_summary('policy-entropy', pe_ph, scope='rl-loss'))
 
-        sums.append(scalar_summary('value-loss-scaled', vl_scaled_ph, scope='scaled-rl-loss'))
-        sums.append(scalar_summary('policy-loss-scaled', pl_scaled_ph, scope='scaled-rl-loss'))
-        sums.append(scalar_summary('policy-entropy-scaled', pe_scaled_ph, scope='scaled-rl-loss'))
-
         if log_weights:
             if with_vae:
                 vvs = tf.trainable_variables('vae')
@@ -275,13 +266,13 @@ def learn(*, network, env, total_timesteps, eval_env = None, seed=None, nsteps=2
 
         if with_vae:
             rel_ph = tf.placeholder(tf.bfloat16, (), name='rec-loss')
-            kll_ph = tf.placeholder(tf.bfloat16, (), name='rec-loss')
+            kll_ph = tf.placeholder(tf.bfloat16, (), name='kl-loss')
             klls_ph = [tf.placeholder(tf.bfloat16, (), name=f'z{i}-kl') for i in range(model.vae.latent_dim)]
 
-            scalar_summary('reconstruction-loss', rel_ph, scope='vae-loss')
-            scalar_summary('kl-loss', kll_ph, scope='vae-loss')
+            sums.append(scalar_summary('reconstruction-loss', rel_ph, scope='vae-loss'))
+            sums.append(scalar_summary('kl-loss', kll_ph, scope='vae-loss'))
             for i in range(model.vae.latent_dim):
-                scalar_summary(f'z{i}-kl', klls_ph[i], scope='z-kl')
+                sums.append(scalar_summary(f'z{i}-kl', klls_ph[i], scope='z-kl'))
 
         merged_ = tf.summary.merge(sums)
 
@@ -294,7 +285,7 @@ def learn(*, network, env, total_timesteps, eval_env = None, seed=None, nsteps=2
     set_from_flat = U.SetFromFlat(var_list)
 
     best_rew = -np.inf
-    print('strarting main loop ...')
+    print('starting main loop ...')
     nupdates = total_timesteps//nbatch
     for update in range(1, nupdates+1):
         assert nbatch % nminibatches == 0
@@ -414,12 +405,9 @@ def learn(*, network, env, total_timesteps, eval_env = None, seed=None, nsteps=2
 
         if tensorboard:
             fd = {
-                pl_ph: lossvals[0],
-                vl_ph: lossvals[1],
-                pe_ph: lossvals[2],
-                pl_scaled_ph: lossvals[0] * pg_coef,
-                vl_scaled_ph: lossvals[1] * vf_coef,
-                pe_scaled_ph: lossvals[2] * ent_coef,
+                pl_ph: lossvals[0] * pg_coef * rl_coef,
+                vl_ph: lossvals[1] * vf_coef * rl_coef,
+                pe_ph: lossvals[2] * ent_coef * rl_coef,
                 ak_ph: lossvals[-2],
                 cf_ph: lossvals[-1],
                 stop_ph: int(stop),
@@ -430,11 +418,11 @@ def learn(*, network, env, total_timesteps, eval_env = None, seed=None, nsteps=2
                 fd.update({
                     ac_ph: np.reshape(actions, [-1, 1]),
                     ac_clip_ph: np.reshape(np.clip(actions, -2, 2), [-1, 1]),
-                    rel_ph: re_l,
-                    kll_ph: kl_l,
+                    rel_ph: alpha*re_l,
+                    kll_ph: alpha*kl_l,
                 })
                 for i, kph in enumerate(klls_ph):
-                    fd.update({kph: kl_ls[i]})
+                    fd.update({kph: alpha*kl_ls[i]})
 
                 summary = s.run(merged_, feed_dict=fd)
             else:
@@ -447,13 +435,13 @@ def learn(*, network, env, total_timesteps, eval_env = None, seed=None, nsteps=2
             fw.add_summary(summary, update*nbatch)
 
         if with_vae:
-            csv.writeline(datetime.datetime.now().isoformat(), update, update * nbatch, fps, float(lossvals[2]),
-                          float(lossvals[1]), float(lossvals[0]), float(ev),
+            csv.writeline(datetime.datetime.now().isoformat(), update, update * nbatch, fps, float(lossvals[2] * ent_coef * rl_coef),
+                          float(lossvals[1] * vf_coef * rl_coef), float(lossvals[0] * pg_coef * rl_coef), float(ev),
                           float(mrew), float(lossvals[-2]), float(lossvals[-1]), int(early_stop and stop),
-                          re_l, kl_l, *kl_ls)
+                          alpha*re_l, alpha*kl_l, *(kl_ls*alpha))
         else:
-            csv.writeline(datetime.datetime.now().isoformat(), update, update * nbatch, fps, float(lossvals[2]),
-                          float(lossvals[1]), float(lossvals[0]), float(ev), float(mrew),
+            csv.writeline(datetime.datetime.now().isoformat(), update, update * nbatch, fps, float(lossvals[2] * ent_coef * rl_coef),
+                          float(lossvals[1] * vf_coef * rl_coef), float(lossvals[0] * pg_coef * rl_coef), float(ev), float(mrew),
                           float(lossvals[-2]), float(lossvals[-1]), int(early_stop and stop))
 
         if update % log_interval == 0 or update == 1:

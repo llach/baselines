@@ -29,7 +29,7 @@ class VAEModel(object):
     - Save load the model
     """
     def __init__(self, k, policy, ob_space, ac_space, nbatch_act, nbatch_train, savepath, env, vae_params, rl_coef,
-                v_net, nsteps, ent_coef, vf_coef, pg_coef, max_grad_norm, microbatch_size=None, with_kl=False):
+                v_net, nsteps, ent_coef, vf_coef, pg_coef, max_grad_norm, microbatch_size=None, with_kl=False, alpha=1.0):
         self.sess = sess = get_session()
 
         v_in_shape = env.observation_space.shape[:-1] + (1,)
@@ -110,9 +110,9 @@ class VAEModel(object):
                 print('adding KL to loss')
                 loss += (self.vae.beta * self.vae.kl_loss)
         else:
-            print(f'using joint loss with rl_coef {rl_coef}')
+            print(f'using joint loss with rl_coef {rl_coef} and alpha {alpha}')
             params = tf.trainable_variables()
-            loss = rl_coef * loss + self.vae.vae_loss
+            loss = rl_coef * loss + alpha * self.vae.vae_loss
 
         print('#params ', len(params))
         # 2. Build our trainer
