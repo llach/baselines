@@ -101,12 +101,19 @@ def cnn(**conv_kwargs):
 
 @register("cnn_atari")
 def cnn_pend(**conv_kwargs):
+    if 'latents' in conv_kwargs:
+        latents = conv_kwargs['latents']
+    else:
+        latents = 20
+
     def cnn_pend_fn(scaled_images, **conv_kwargs):
         """
-        VAE CNN for pendulum env.
+        VAE CNN for atari env.
         """
 
-        latent_dim = 20
+        print(f'building with {latents} latents')
+
+        latent_dim = latents
         hiddens = 512
         encoder_conf = zip([32, 64],  # num filter
                            [2, 2],  # kernel size
@@ -131,12 +138,19 @@ def cnn_pend(**conv_kwargs):
 
 @register("cnn_pend")
 def cnn_pend(**conv_kwargs):
+    if 'latents' in conv_kwargs:
+        latents = conv_kwargs['latents']
+    else:
+        latents = 5
+
     def cnn_pend_fn(scaled_images, **conv_kwargs):
         """
         VAE CNN for pendulum env.
         """
 
-        latent_dim = 5
+        print(f'building with {latents} latents')
+
+        latent_dim = latents
         hiddens = 256
         encoder_conf = zip([32, 32, 64, 64],  # num filter
                            [4] * 4,  # kernel size

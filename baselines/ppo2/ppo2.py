@@ -139,9 +139,14 @@ def learn(*, network, env, total_timesteps, eval_env = None, seed=None, nsteps=2
         else:
             with_kl = False
 
+    if 'latents' in network_kwargs:
+        latents = network_kwargs['latents']
+    else:
+        latents = None
+
     savepath, env_id_lower = log_alg('ppo2', env_id, locals(), vae, num_envs=env.num_envs, save=save, lr=lr, k=k,
                                      seed=seed, model=models, with_kl=with_kl, rl_coef=rl_coef, early_stop=early_stop,
-                                     target_kl=target_kl, scaled_re_loss=scaled_v, alpha=alpha)
+                                     target_kl=target_kl, scaled_re_loss=scaled_v, alpha=alpha, latents=latents)
 
     # Instantiate the model object (that creates act_model and train_model)
     if vae_params is None:
