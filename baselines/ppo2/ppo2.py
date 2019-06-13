@@ -25,11 +25,72 @@ def constfn(val):
         return val
     return f
 
+def get_theta_traversal_tensor(latents=5, frames=200):
+    import cairocffi as cairo
+    import tensorflow as tf
+    import tfmpl
+
+    @tfmpl.figure_tensor
+    def theta_traversal(mus, xs):
+        ''' Draw theta traversal plots. '''
+        figs = tfmpl.create_figures(1, figsize=(12, 10))
+        ax = figs[0].add_subplot(111)
+        for i in range(mus.shape[0]):
+            ax.plot(xs, mus[i], label=f'mus[{i}]')
+            ax.scatter(xs, mus[i], linewidths=0.05, marker='x')
+        figs[0].tight_layout()
+
+        return figs
+
+    mus_ph = tf.placeholder(tf.float32, (latents, frames))
+
+    image_tensor = theta_traversal(mus_ph, xs=np.linspace(0, 2 * np.pi, frames))
+    image_summary = tf.summary.image('theta-traversal', image_tensor)
+
+    w, h = 64, 64
+    surf = cairo.ImageSurface(cairo.FORMAT_RGB24, w, h)
+
+    def _render_pendulum(th):
+        cr = cairo.Context(surf)
+
+        # draw background
+        cr.set_source_rgb(1, 1, 1)
+        cr.paint()
+
+        # apply transforms
+        cr.translate((w / 2), h / 2)
+        cr.rotate(np.pi - th)
+
+        # draw shapes that form the capsule
+        cr.rectangle(-2.5, 0, 5, 27)
+        cr.arc(0, 0, 2.5, 0, 2 * np.pi)
+        cr.arc(0, (h / 2) - 4, 2.5, 0, 2 * np.pi)
+
+        # draw color
+        cr.set_source_rgb(.8, .3, .3)
+        cr.fill()
+
+        # center sphere
+        cr.arc(0, 0, 1, 0, 2 * np.pi)
+        cr.set_source_rgb(0, 0, 0)
+        cr.fill()
+
+        # reshape, delete fourth (alpha) channel, greyscale and normalise
+        return np.expand_dims(np.dot(np.frombuffer(surf.get_data(), np.uint8).reshape([w, h, 4])[..., :3],
+                                     [0.299, 0.587, 0.114]), -1) / 255
+
+    frames_arr = np.zeros([frames, 64, 64, 1])
+
+    for i, theta in enumerate(np.linspace(0, 2 * np.pi, frames)):
+        frames_arr[i] = _render_pendulum(theta)
+
+    return mus_ph, image_summary, frames_arr
+
 def learn(*, network, env, total_timesteps, eval_env = None, seed=None, nsteps=2048, ent_coef=0.0, lr=3e-4, target_kl=0.01,
           vf_coef=0.5, pg_coef=1.0, max_grad_norm=0.5, gamma=0.99, lam=0.95, rl_coef=1.0, v_net='pendulum', f16=False,
           log_interval=10, nminibatches=4, noptepochs=4, cliprange=0.2, vae_params=None, log_weights=False, early_stop=False,
           save_interval=50, load_path=None, model_fn=None, env_id=None, play=False, save=True, tensorboard=False, k=None,
-          alpha=1.0, **network_kwargs):
+          alpha=1.0, plot_thetas=False, **network_kwargs):
     '''
     Learn policy using PPO algorithm (https://arxiv.org/abs/1707.06347)
 
@@ -284,6 +345,10 @@ def learn(*, network, env, total_timesteps, eval_env = None, seed=None, nsteps=2
         img_ph = tf.placeholder(tf.float32, shape=(1,) + tuple(np.multiply(ob_space.shape[:-1], [5, 3])) + (3,))
         im_sum = tf.summary.image('images', img_ph, max_outputs=5)
 
+        if plot_thetas:
+            mus_ph, th_im_sum, theta_frames = get_theta_traversal_tensor()
+            theta_frames = theta_frames.reshape([40, 5, 64, 64, 1])
+
     var_list = tf.trainable_variables()
 
     get_flat = U.GetFlat(var_list)
@@ -450,6 +515,12 @@ def learn(*, network, env, total_timesteps, eval_env = None, seed=None, nsteps=2
                           float(lossvals[-2]), float(lossvals[-1]), int(early_stop and stop))
 
         if update % log_interval == 0 or update == 1:
+            if plot_thetas:
+                mus, _ = model.vae.encode(theta_frames)
+                mus = np.reshape(mus, [200, 5])
+                th_sum_eval = s.run(th_im_sum, feed_dict={mus_ph: np.moveaxis(mus,0,1)})
+                fw.add_summary(th_sum_eval, update * nbatch)
+
             if with_vae:
                 sampled_obs = obs[np.random.choice(nbatch, 5)]
 
