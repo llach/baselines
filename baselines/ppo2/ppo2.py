@@ -489,10 +489,10 @@ def learn(*, network, env, total_timesteps, eval_env = None, seed=None, nsteps=2
                     ac_ph: np.reshape(actions, [-1, 1]),
                     ac_clip_ph: np.reshape(np.clip(actions, -2, 2), [-1, 1]),
                     rel_ph: alpha*re_l,
-                    kll_ph: alpha*kl_l,
+                    kll_ph: alpha*model.vae.beta*kl_l,
                 })
                 for i, kph in enumerate(klls_ph):
-                    fd.update({kph: alpha*kl_ls[i]})
+                    fd.update({kph: model.vae.beta*alpha*kl_ls[i]})
 
                 summary = s.run(merged_, feed_dict=fd)
             else:
@@ -508,7 +508,7 @@ def learn(*, network, env, total_timesteps, eval_env = None, seed=None, nsteps=2
             csv.writeline(datetime.datetime.now().isoformat(), update, update * nbatch, fps, float(lossvals[2] * ent_coef * rl_coef),
                           float(lossvals[1] * vf_coef * rl_coef), float(lossvals[0] * pg_coef * rl_coef), float(ev),
                           float(mrew), float(lossvals[-2]), float(lossvals[-1]), int(early_stop and stop),
-                          alpha*re_l, alpha*kl_l, *(kl_ls*alpha))
+                          alpha*re_l, alpha*model.vae.beta*kl_l, *(model.vae.beta*kl_ls*alpha))
         else:
             csv.writeline(datetime.datetime.now().isoformat(), update, update * nbatch, fps, float(lossvals[2] * ent_coef * rl_coef),
                           float(lossvals[1] * vf_coef * rl_coef), float(lossvals[0] * pg_coef * rl_coef), float(ev), float(mrew),
