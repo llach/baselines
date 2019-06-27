@@ -521,33 +521,33 @@ def learn(*, network, env, total_timesteps, eval_env = None, seed=None, nsteps=2
                 th_sum_eval = s.run(th_im_sum, feed_dict={mus_ph: np.moveaxis(mus,0,1)})
                 fw.add_summary(th_sum_eval, update * nbatch)
 
-            if with_vae:
-                sampled_obs = obs[np.random.choice(nbatch, 5)]
+                if with_vae:
+                    sampled_obs = obs[np.random.choice(nbatch, 5)]
 
-                sampled_obs = np.expand_dims(np.moveaxis(sampled_obs, -1, 1), -1)
-                reconstructions = model.vae.reconstruct_stacked(sampled_obs)
+                    sampled_obs = np.expand_dims(np.moveaxis(sampled_obs, -1, 1), -1)
+                    reconstructions = model.vae.reconstruct_stacked(sampled_obs)
 
-                vf_grad = s.run(vf_grad_op, feed_dict={model.vae.X: sampled_obs})
-                vf_grad = np.squeeze(np.asarray(vf_grad, dtype=np.float32))[:, 0, ...].copy()
+                    vf_grad = s.run(vf_grad_op, feed_dict={model.vae.X: sampled_obs})
+                    vf_grad = np.squeeze(np.asarray(vf_grad, dtype=np.float32))[:, 0, ...].copy()
 
-                # scale gradients to [0,1]
-                vf_grad += np.abs(np.min(vf_grad))
-                vf_grad *= (1/(np.abs(np.min(vf_grad)) + np.max(vf_grad)))
+                    # scale gradients to [0,1]
+                    vf_grad += np.abs(np.min(vf_grad))
+                    vf_grad *= (1/(np.abs(np.min(vf_grad)) + np.max(vf_grad)))
 
-                shw = []
-                for l in range(sampled_obs.shape[0]):
-                    samo = np.repeat(sampled_obs[l, 0, ...], 3, axis=-1)
-                    reco = np.repeat(np.asarray(reconstructions[l, ...], dtype=np.float32), 3, axis=-1)
-                    lob = samo.copy()
-                    lob[..., -1] += np.where(vf_grad[l] > np.mean(vf_grad[l]) * 1.1, vf_grad[l], np.zeros_like(vf_grad[l]))
-                    cano = np.concatenate((samo, reco, lob), axis=1)
+                    shw = []
+                    for l in range(sampled_obs.shape[0]):
+                        samo = np.repeat(sampled_obs[l, 0, ...], 3, axis=-1)
+                        reco = np.repeat(np.asarray(reconstructions[l, ...], dtype=np.float32), 3, axis=-1)
+                        lob = samo.copy()
+                        lob[..., -1] += np.where(vf_grad[l] > np.mean(vf_grad[l]) * 1.1, vf_grad[l], np.zeros_like(vf_grad[l]))
+                        cano = np.concatenate((samo, reco, lob), axis=1)
 
-                    shw.append(cano)
+                        shw.append(cano)
 
-                shw = np.concatenate(shw, axis=0)
+                    shw = np.concatenate(shw, axis=0)
 
-                im_sum_eval = s.run(im_sum, feed_dict={img_ph: np.expand_dims(shw, axis=0)})
-                fw.add_summary(im_sum_eval, update * nbatch)
+                    im_sum_eval = s.run(im_sum, feed_dict={img_ph: np.expand_dims(shw, axis=0)})
+                    fw.add_summary(im_sum_eval, update * nbatch)
 
             logger.logkv("serial_timesteps", update*nsteps)
             logger.logkv("nupdates", update)
