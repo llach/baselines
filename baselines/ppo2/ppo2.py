@@ -342,10 +342,10 @@ def learn(*, network, env, total_timesteps, eval_env = None, seed=None, nsteps=2
 
         merged_ = tf.summary.merge(sums)
 
-        img_ph = tf.placeholder(tf.float32, shape=(1,) + tuple(np.multiply(ob_space.shape[:-1], [5, 3])) + (3,))
-        im_sum = tf.summary.image('images', img_ph, max_outputs=5)
-
         if plot_thetas:
+            img_ph = tf.placeholder(tf.float32, shape=(1,) + tuple(np.multiply(ob_space.shape[:-1], [5, 3])) + (3,))
+            im_sum = tf.summary.image('images', img_ph, max_outputs=5)
+
             mus_ph, th_im_sum, theta_frames = get_theta_traversal_tensor()
             theta_frames = theta_frames.reshape([40, 5, 64, 64, 1])
 
