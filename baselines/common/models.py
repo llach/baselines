@@ -172,6 +172,49 @@ def cnn_pend(**conv_kwargs):
 
     return cnn_pend_fn
 
+
+@register("cnn_pend_shared")
+def cnn_pend(**conv_kwargs):
+    if 'latents' in conv_kwargs:
+        latents = conv_kwargs['latents']
+    else:
+        latents = 5
+
+    def cnn_pend_fn(scaled_images, **conv_kwargs):
+        """
+        VAE CNN for pendulum env.
+        """
+
+        print(f'building with {latents} latents')
+
+        def cnn_once(_x):
+            latent_dim = latents
+            hiddens = 256
+            encoder_conf = zip([32, 32, 64, 64],  # num filter
+                               [4] * 4,  # kernel size
+                               [(2, 2)] * 4)  # strides
+
+            with tf.variable_scope('cnn-pend', reuse=tf.AUTO_REUSE):
+                for n, (filters, kernel_size, stride) in enumerate(encoder_conf):
+                    cx = tf.contrib.layers.conv2d(inputs=_x,
+                                                 num_outputs=filters,
+                                                 kernel_size=kernel_size,
+                                                 stride=stride,
+                                                 activation_fn=tf.nn.relu)
+                flat_encoder = tf.layers.flatten(cx)
+                fc = tf.contrib.layers.fully_connected(flat_encoder, hiddens, activation_fn=tf.nn.relu)
+                return tf.contrib.layers.fully_connected(fc, latent_dim, activation_fn=tf.nn.tanh)
+
+        u = []
+        x = scaled_images
+
+        for i in range(scaled_images.shape[-1]):
+            u.append(cnn_once(tf.expand_dims(x[..., i], axis=-1)))
+
+        return mlp()(tf.concat(u, axis=1))
+
+    return cnn_pend_fn
+
 @register("cnn_small")
 def cnn_small(**conv_kwargs):
     def network_fn(X):
